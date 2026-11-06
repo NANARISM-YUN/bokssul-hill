@@ -4,6 +4,7 @@ import { Html, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import type { RemotePlayer } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
+import { BokssulAvatarMesh } from './BokssulAvatar';
 
 const SingleRemoteBokssul = ({
   player,
@@ -61,7 +62,6 @@ const SingleRemoteBokssul = ({
       ? Math.abs(Math.sin(hopTimer.current)) * 0.34
       : 0;
 
-    // 바디랭귀지 액션 모션 처리
     let actionY = 0;
     bodyRef.current.rotation.set(0, 0, 0);
     bodyRef.current.scale.set(1, 1, 1);
@@ -78,7 +78,6 @@ const SingleRemoteBokssul = ({
       bodyRef.current.scale.set(1.25, 0.68, 1.25);
       actionY = -0.14;
     } else if (isActuallyMoving) {
-      // 말랑 텐션 (Squash & Stretch)
       const squash = Math.sin(hopTimer.current * 2) * 0.12;
       bodyRef.current.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
     }
@@ -144,42 +143,7 @@ const SingleRemoteBokssul = ({
         <Sparkles count={15} scale={1.8} size={4} color="#fde047" />
       )}
 
-      <group ref={bodyRef}>
-        <mesh castShadow>
-          <sphereGeometry args={[0.46, 24, 24]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[-0.26, -0.05, 0.1]} castShadow>
-          <sphereGeometry args={[0.32, 16, 16]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[0.26, -0.05, 0.1]} castShadow>
-          <sphereGeometry args={[0.32, 16, 16]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-
-        <mesh position={[0, 0.5, 0]} castShadow>
-          <sphereGeometry args={[0.22, 16, 16]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.14, 0.05, 8, 20]} />
-          <meshToonMaterial color={player.color} />
-        </mesh>
-
-        <mesh position={[0, 0.06, 0.44]}>
-          <sphereGeometry args={[0.09, 12, 12]} />
-          <meshBasicMaterial color="#1c1917" />
-        </mesh>
-        <mesh position={[-0.15, 0.17, 0.4]}>
-          <sphereGeometry args={[0.048, 12, 12]} />
-          <meshBasicMaterial color="#1c1917" />
-        </mesh>
-        <mesh position={[0.15, 0.17, 0.4]}>
-          <sphereGeometry args={[0.048, 12, 12]} />
-          <meshBasicMaterial color="#1c1917" />
-        </mesh>
-      </group>
+      <BokssulAvatarMesh ref={bodyRef} color={player.color} />
     </group>
   );
 };
