@@ -20,3 +20,16 @@ export interface Wish {
 }
 
 export type CameraMode = 'follow' | 'tree' | 'sky';
+
+// 실시간 멀티플레이 접속자 데이터 구조
+export interface RemotePlayer {
+  id: string;
+  nickname: string;
+  color: string;
+  x: number;
+  z: number;
+  rot: number;
+  isMoving: boolean;
+  emote?: string | null;
+  lastSeen: number;
+}

@@ -14,6 +14,10 @@ export const BokssulPlayerAndCamera = ({
   focusedTarget,
   onNearTreeChange,
   hideLabels = false,
+  myNickname = '복쓸덩이',
+  myColor = '#d84315',
+  myEmote = null,
+  onPositionBroadcast,
 }: {
   keys: React.MutableRefObject<{ [key: string]: boolean }>;
   joystickVec: React.MutableRefObject<{ x: number; y: number }>;
@@ -22,12 +26,28 @@ export const BokssulPlayerAndCamera = ({
   focusedTarget: [number, number, number] | null;
   onNearTreeChange: (isNear: boolean) => void;
   hideLabels?: boolean;
+  myNickname?: string;
+  myColor?: string;
+  myEmote?: string | null;
+  onPositionBroadcast?: (state: {
+    x: number;
+    z: number;
+    rot: number;
+    isMoving: boolean;
+  }) => void;
 }) => {
   const groupRef = useRef<THREE.Group>(null);
-  const posRef = useRef({ x: 0, z: 8.5 });
+  // 처음 입장할 때 캐릭터들이 완전히 겹치지 않도록 약간 랜덤한 위치에서 시작
+  const initialPos = useRef({
+    x: (Math.random() - 0.5) * 4,
+    z: 7.5 + Math.random() * 2,
+  });
+  const posRef = useRef({ x: initialPos.current.x, z: initialPos.current.z });
   const rotRef = useRef(Math.PI);
   const hopTimer = useRef(0);
   const nearRef = useRef(false);
+  const lastBroadcastTime = useRef(0);
+  const wasMovingRef = useRef(false);
 
   useFrame((state, delta) => {
     if (!groupRef.current) return;
@@ -73,7 +93,11 @@ export const BokssulPlayerAndCamera = ({
       }
 
       const targetRot = Math.atan2(moveVec.x, moveVec.z);
-      rotRef.current = THREE.MathUtils.lerp(rotRef.current, targetRot, 12 * delta);
+      rotRef.current = THREE.MathUtils.lerp(
+        rotRef.current,
+        targetRot,
+        12 * delta
+      );
       hopTimer.current += delta * 15;
     } else {
       hopTimer.current = 0;
@@ -88,6 +112,23 @@ export const BokssulPlayerAndCamera = ({
       posRef.current.z
     );
     groupRef.current.rotation.y = rotRef.current;
+
+    // 0.1초 간격으로 내 위치를 실시간 채널에 브로드캐스트 (트래픽 절약)
+    const now = state.clock.elapsedTime;
+    if (
+      onPositionBroadcast &&
+      ( (isMoving && now - lastBroadcastTime.current > 0.1) ||
+        (wasMovingRef.current && !isMoving) )
+    ) {
+      lastBroadcastTime.current = now;
+      onPositionBroadcast({
+        x: Number(posRef.current.x.toFixed(2)),
+        z: Number(posRef.current.z.toFixed(2)),
+        rot: Number(rotRef.current.toFixed(2)),
+        isMoving,
+      });
+    }
+    wasMovingRef.current = isMoving;
 
     if (controlsRef.current) {
       if (focusedTarget) {
@@ -123,16 +164,34 @@ export const BokssulPlayerAndCamera = ({
   });
 
   return (
-    <group ref={groupRef} position={[0, getTerrainHeight(0, 8.5) + 0.45, 8.5]}>
+    <group
+      ref={groupRef}
+      position={[
+        initialPos.current.x,
+        getTerrainHeight(initialPos.current.x, initialPos.current.z) + 0.45,
+        initialPos.current.z,
+      ]}
+    >
       {!hideLabels && (
         <Html
-          position={[0, 1.2, 0]}
+          position={[0, 1.25, 0]}
           center
           distanceFactor={14}
           zIndexRange={[10, 0]}
         >
-          <div className="px-2.5 py-0.5 bg-white/95 backdrop-blur-sm rounded-full text-[11px] font-extrabold text-lime-950 shadow-md border border-lime-700/30 whitespace-nowrap">
-            나 (복쓸덩이)
+          <div className="flex flex-col items-center pointer-events-none">
+            {myEmote && (
+              <div className="mb-1 px-2.5 py-0.5 bg-amber-400 text-stone-950 rounded-full text-xs font-extrabold shadow-md animate-bounce whitespace-nowrap">
+                {myEmote}
+              </div>
+            )}
+            <div className="px-2.5 py-0.5 bg-white/95 backdrop-blur-sm rounded-full text-[11px] font-extrabold text-lime-950 shadow-md border border-lime-700/30 whitespace-nowrap flex items-center gap-1">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: myColor }}
+              />
+              <span>{myNickname} (나)</span>
+            </div>
           </div>
         </Html>
       )}
@@ -156,7 +215,7 @@ export const BokssulPlayerAndCamera = ({
       </mesh>
       <mesh position={[0, 0.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.14, 0.05, 8, 20]} />
-        <meshToonMaterial color="#d84315" />
+        <meshToonMaterial color={myColor} />
       </mesh>
 
       <mesh position={[0, 0.06, 0.44]}>

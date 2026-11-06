@@ -1,28 +1,59 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sparkles } from '@react-three/drei';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import {
   Sparkles as SparkleIcon,
   Star,
   ScrollText,
   Compass,
+  Users,
+  Smile,
 } from 'lucide-react';
 
-import type { Wish, Blessing, CameraMode } from './types/wish';
+import type { Wish, Blessing, CameraMode, RemotePlayer } from './types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './utils/terrain';
+import { supabase } from './utils/supabase';
 import {
   TraditionalClouds,
   UnifiedHillTerrain,
   WishTreeAndGuardian,
 } from './components/three/WorldEnvironment';
 import { BokssulPlayerAndCamera } from './components/three/BokssulPlayer';
+import { OtherPlayers } from './components/three/OtherPlayers';
 import { WishPouchObject } from './components/three/WishPouchObject';
 import { VirtualJoystick } from './components/ui/VirtualJoystick';
 import { WishWriteModal, WishDetailModal } from './components/ui/WishModals';
 
+const RANDOM_COLORS = ['#e53935', '#fb8c00', '#d81b60', '#43a047', '#1e88e5', '#8e24aa'];
+
 export default function App() {
   const TARGET_BLESSINGS = 3;
+
+  // 내 고유 ID 및 복쓸덩이 프로필
+  const myIdRef = useRef<string>(
+    'user_' + Math.random().toString(36).substring(2, 9)
+  );
+  const [myNickname, setMyNickname] = useState<string>(
+    () =>
+      localStorage.getItem('bokssul_nick') ||
+      `복쓸이${Math.floor(10 + Math.random() * 89)}`
+  );
+  const [myColor, setMyColor] = useState<string>(
+    () =>
+      localStorage.getItem('bokssul_color') ||
+      RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)]
+  );
+  const [myEmote, setMyEmote] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  // 다른 실시간 접속자 목록
+  const [remotePlayers, setRemotePlayers] = useState<
+    Record<string, RemotePlayer>
+  >({});
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const myLatestCoordsRef = useRef({ x: 0, z: 8.5, rot: Math.PI, isMoving: false });
 
   const [wishes, setWishes] = useState<Wish[]>([
     {
@@ -126,11 +157,11 @@ export default function App() {
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
 
-  const [nickname, setNickname] = useState('');
+  const [nickname, setNickname] = useState(myNickname);
   const [content, setContent] = useState('');
   const [pouchColor, setPouchColor] = useState('#e53935');
 
-  const [blessingAuthor, setBlessingAuthor] = useState('');
+  const [blessingAuthor, setBlessingAuthor] = useState(myNickname);
   const [blessingComment, setBlessingComment] = useState('');
 
   const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
@@ -147,11 +178,148 @@ export default function App() {
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   const selectedWish = wishes.find((w) => w.id === selectedWishId) || null;
-  const isAnyModalOpen = isWriteModalOpen || Boolean(selectedWishId);
+  const isAnyModalOpen =
+    isWriteModalOpen || Boolean(selectedWishId) || isProfileModalOpen;
+
+  // --- Supabase Realtime 멀티플레이 채널 연결 ---
+  useEffect(() => {
+    const myId = myIdRef.current;
+    const channel = supabase.channel('bokssul-hill-room', {
+      config: {
+        presence: { key: myId },
+        broadcast: { self: false },
+      },
+    });
+
+    channelRef.current = channel;
+
+    // 1. 접속자 입/퇴장 감지 (Presence)
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      setRemotePlayers((prev) => {
+        const next: Record<string, RemotePlayer> = {};
+        Object.entries(state).forEach(([key, list]) => {
+          if (key === myId || !list || list.length === 0) return;
+          const info = list[0] as unknown as Partial<RemotePlayer>;
+          const existing = prev[key];
+          next[key] = {
+            id: key,
+            nickname: info.nickname || existing?.nickname || '복쓸이',
+            color: info.color || existing?.color || '#e53935',
+            x: existing?.x ?? info.x ?? 0,
+            z: existing?.z ?? info.z ?? 8.5,
+            rot: existing?.rot ?? info.rot ?? Math.PI,
+            isMoving: existing?.isMoving ?? false,
+            emote: existing?.emote ?? null,
+            lastSeen: Date.now(),
+          };
+        });
+        return next;
+      });
+    });
+
+    // 2. 다른 복쓸덩이 실시간 이동 좌표 수신 (Broadcast)
+    channel.on('broadcast', { event: 'player-move' }, ({ payload }) => {
+      if (!payload || payload.id === myId) return;
+      setRemotePlayers((prev) => ({
+        ...prev,
+        [payload.id]: {
+          ...(prev[payload.id] || {}),
+          id: payload.id,
+          nickname: payload.nickname,
+          color: payload.color,
+          x: payload.x,
+          z: payload.z,
+          rot: payload.rot,
+          isMoving: payload.isMoving,
+          emote: payload.emote ?? prev[payload.id]?.emote ?? null,
+          lastSeen: Date.now(),
+        },
+      }));
+    });
+
+    // 3. 다른 유저가 건 소원/덕담/별승천 실시간 동기화
+    channel.on('broadcast', { event: 'wish-sync' }, ({ payload }) => {
+      if (!payload || !payload.wishes) return;
+      const incoming = (payload.wishes as Wish[]).map((w) => ({
+        ...w,
+        isMine: false,
+      }));
+      setWishes(incoming);
+      if (payload.banner) {
+        setBannerMessage(payload.banner);
+      }
+      if (payload.nightMode !== undefined) {
+        setIsNightMode(payload.nightMode);
+      }
+    });
+
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({
+          id: myId,
+          nickname: myNickname,
+          color: myColor,
+          x: myLatestCoordsRef.current.x,
+          z: myLatestCoordsRef.current.z,
+          rot: myLatestCoordsRef.current.rot,
+        });
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [myNickname, myColor]);
+
+  // 내 위치 브로드캐스트 콜백
+  const handlePositionBroadcast = useCallback(
+    (coords: { x: number; z: number; rot: number; isMoving: boolean }) => {
+      myLatestCoordsRef.current = coords;
+      if (!channelRef.current) return;
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'player-move',
+        payload: {
+          id: myIdRef.current,
+          nickname: myNickname,
+          color: myColor,
+          ...coords,
+          emote: myEmote,
+        },
+      });
+    },
+    [myNickname, myColor, myEmote]
+  );
+
+  // 인사/감정표현 보내기
+  const handleTriggerEmote = () => {
+    const emotes = ['👋 반가워개!', '❤️ 복 받으시개!', '✨ 소원 성취!', '🐾 멍멍!'];
+    const picked = emotes[Math.floor(Math.random() * emotes.length)];
+    setMyEmote(picked);
+
+    if (channelRef.current) {
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'player-move',
+        payload: {
+          id: myIdRef.current,
+          nickname: myNickname,
+          color: myColor,
+          ...myLatestCoordsRef.current,
+          emote: picked,
+        },
+      });
+    }
+
+    setTimeout(() => {
+      setMyEmote(null);
+    }, 3000);
+  };
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (isWriteModalOpen || selectedWishId) return;
+      if (isAnyModalOpen) return;
       keys.current[e.code] = true;
     };
     const onKeyUp = (e: KeyboardEvent) => {
@@ -163,10 +331,28 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [isWriteModalOpen, selectedWishId]);
+  }, [isAnyModalOpen]);
 
   const hangingCount = wishes.filter((w) => w.status === 'hanging').length;
   const starCount = wishes.filter((w) => w.status === 'star').length;
+  const totalOnlineCount = Object.keys(remotePlayers).length + 1;
+
+  const broadcastWishes = (
+    nextWishes: Wish[],
+    banner?: string,
+    nightMode?: boolean
+  ) => {
+    if (!channelRef.current) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'wish-sync',
+      payload: {
+        wishes: nextWishes,
+        banner,
+        nightMode,
+      },
+    });
+  };
 
   const handleAddWish = (e: React.FormEvent) => {
     e.preventDefault();
@@ -189,22 +375,22 @@ export default function App() {
       color: pouchColor,
     };
 
-    setWishes((prev) => [...prev, newWish]);
-    setNickname('');
+    const nextWishes = [...wishes, newWish];
+    const msg = `👑 '${newWish.nickname}'님의 소원지가 당산나무에 걸렸습니다!`;
+    setWishes(nextWishes);
     setContent('');
     setIsWriteModalOpen(false);
     setCameraMode('tree');
     setFocusedTarget(newWish.branchPos);
-    setBannerMessage(
-      `👑 '${newWish.nickname}'님의 소원지가 당산나무에 걸렸습니다!`
-    );
+    setBannerMessage(msg);
+    broadcastWishes(nextWishes, msg);
   };
 
   const handleAddBlessing = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedWish || !blessingComment.trim()) return;
 
-    const authorName = blessingAuthor.trim() || '익명의 복쓸덩이';
+    const authorName = blessingAuthor.trim() || myNickname || '익명의 복쓸덩이';
     const newBlessing: Blessing = {
       id: Date.now().toString(),
       author: authorName,
@@ -213,20 +399,21 @@ export default function App() {
     };
 
     const nextBlessings = [...selectedWish.blessings, newBlessing];
-    setWishes((prev) =>
-      prev.map((w) =>
-        w.id === selectedWish.id
-          ? { ...w, blessings: nextBlessings, hasMyBlessing: true }
-          : w
-      )
+    const nextWishes = wishes.map((w) =>
+      w.id === selectedWish.id
+        ? { ...w, blessings: nextBlessings, hasMyBlessing: true }
+        : w
     );
+
+    setWishes(nextWishes);
     setBlessingComment('');
 
+    let msg: string | undefined;
     if (nextBlessings.length >= selectedWish.targetBlessings) {
-      setBannerMessage(
-        `✨ 지성이면 감천! '${selectedWish.nickname}'님의 소원에 복 기운이 가득 찼습니다!`
-      );
+      msg = `✨ 지성이면 감천! '${selectedWish.nickname}'님의 소원에 복 기운이 가득 찼습니다!`;
+      setBannerMessage(msg);
     }
+    broadcastWishes(nextWishes, msg);
   };
 
   const handleAscendToStar = (wishId: string) => {
@@ -237,22 +424,40 @@ export default function App() {
     setIsNightMode(true);
     setCameraMode('sky');
     setFocusedTarget(null);
-    setBannerMessage(
-      `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 소원이 밤하늘의 별로 승천합니다!`
-    );
+    const msg = `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 소원이 밤하늘의 별로 승천합니다!`;
+    setBannerMessage(msg);
 
-    setWishes((prev) =>
-      prev.map((w) => (w.id === wishId ? { ...w, status: 'ascending' } : w))
+    const ascendingWishes = wishes.map((w) =>
+      w.id === wishId ? { ...w, status: 'ascending' as const } : w
     );
+    setWishes(ascendingWishes);
+    broadcastWishes(ascendingWishes, msg, true);
 
     setTimeout(() => {
-      setWishes((prev) =>
-        prev.map((w) => (w.id === wishId ? { ...w, status: 'star' } : w))
-      );
+      setWishes((prev) => {
+        const finalWishes = prev.map((w) =>
+          w.id === wishId ? { ...w, status: 'star' as const } : w
+        );
+        broadcastWishes(
+          finalWishes,
+          `⭐ '${target.nickname}'님의 소원이 별이 되었습니다!`,
+          true
+        );
+        return finalWishes;
+      });
       setBannerMessage(
         `⭐ '${target.nickname}'님의 소원이 별이 되었습니다! 하늘의 별을 터치해보세요.`
       );
     }, 3400);
+  };
+
+  const handleSaveProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    localStorage.setItem('bokssul_nick', myNickname);
+    localStorage.setItem('bokssul_color', myColor);
+    setNickname(myNickname);
+    setBlessingAuthor(myNickname);
+    setIsProfileModalOpen(false);
   };
 
   return (
@@ -263,19 +468,32 @@ export default function App() {
           : 'bg-gradient-to-b from-[#689f38] via-[#9ccc65] to-[#dcedc8]'
       }`}
     >
-      {/* --- Level 2 (HUD): 높이 44px(h-11)로 완벽히 통일된 상단 바 --- */}
+      {/* --- Level 2 (HUD): 높이 44px(h-11) 상단 바 --- */}
       <header className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-1.5 pointer-events-none">
-        {/* 좌측 브랜드 로고 박스 (h-11 고정) */}
-        <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-2.5 md:px-3.5 rounded-2xl shadow-lg border border-amber-900/20 pointer-events-auto flex items-center gap-2 shrink-0">
-          <div className="w-7 h-7 rounded-xl bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-xs shadow-inner border border-amber-400/50">
-            福
+        {/* 좌측 브랜드 로고 & 실시간 접속자 수 배지 */}
+        <div className="flex items-center gap-1.5 pointer-events-auto">
+          <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-2.5 md:px-3.5 rounded-2xl shadow-lg border border-amber-900/20 flex items-center gap-2 shrink-0">
+            <div className="w-7 h-7 rounded-xl bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-xs shadow-inner border border-amber-400/50">
+              福
+            </div>
+            <h1 className="font-extrabold text-stone-900 text-xs md:text-sm whitespace-nowrap">
+              복쓸싸리 동산
+            </h1>
           </div>
-          <h1 className="font-extrabold text-stone-900 text-xs md:text-sm whitespace-nowrap">
-            복쓸싸리 동산
-          </h1>
+
+          {/* 실시간 동시 접속자 수 & 내 프로필 설정 버튼 */}
+          <button
+            onClick={() => setIsProfileModalOpen(true)}
+            className="h-11 bg-stone-900/85 hover:bg-stone-900 backdrop-blur-md px-2.5 rounded-2xl shadow-lg border border-white/15 flex items-center gap-1.5 text-white text-[11px] font-extrabold transition shrink-0"
+            title="내 복쓸덩이 이름/색상 바꾸기"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <Users className="w-3.5 h-3.5 text-emerald-300" />
+            <span>{totalOnlineCount}명</span>
+          </button>
         </div>
 
-        {/* 우측 시점 전환 & 낮밤 스위치 (h-11 고정) */}
+        {/* 우측 시점 전환 & 낮밤 스위치 */}
         <div className="flex items-center gap-1 pointer-events-auto">
           <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-1 rounded-2xl shadow-lg border border-stone-300 flex items-center gap-0.5">
             <button
@@ -283,14 +501,14 @@ export default function App() {
                 setFocusedTarget(null);
                 setCameraMode('follow');
               }}
-              className={`h-8 px-2.5 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
+              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
                 cameraMode === 'follow' && !focusedTarget
                   ? 'bg-lime-800 text-white shadow'
                   : 'text-stone-700 hover:bg-stone-200/70'
               }`}
             >
               <Compass className="w-3.5 h-3.5 shrink-0" />
-              <span>산책</span>
+              <span className="hidden sm:inline">산책</span>
             </button>
 
             <button
@@ -298,13 +516,13 @@ export default function App() {
                 setFocusedTarget(null);
                 setCameraMode('tree');
               }}
-              className={`h-8 px-2.5 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
+              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
                 cameraMode === 'tree' && !focusedTarget
                   ? 'bg-lime-800 text-white shadow'
                   : 'text-stone-700 hover:bg-stone-200/70'
               }`}
             >
-              <span>🌳나무({hangingCount})</span>
+              <span>🌳({hangingCount})</span>
             </button>
 
             <button
@@ -313,14 +531,14 @@ export default function App() {
                 setCameraMode('sky');
                 setIsNightMode(true);
               }}
-              className={`h-8 px-2.5 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
+              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
                 cameraMode === 'sky'
                   ? 'bg-indigo-950 text-amber-300 shadow'
                   : 'text-stone-700 hover:bg-stone-200/70'
               }`}
             >
               <Star className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
-              <span>별({starCount})</span>
+              <span>({starCount})</span>
             </button>
           </div>
 
@@ -379,6 +597,7 @@ export default function App() {
           showGreeting={isNearTree}
         />
 
+        {/* 내 복쓸덩이 캐릭터 */}
         <BokssulPlayerAndCamera
           keys={keys}
           joystickVec={joystickVec}
@@ -387,7 +606,14 @@ export default function App() {
           focusedTarget={focusedTarget}
           onNearTreeChange={setIsNearTree}
           hideLabels={isAnyModalOpen}
+          myNickname={myNickname}
+          myColor={myColor}
+          myEmote={myEmote}
+          onPositionBroadcast={handlePositionBroadcast}
         />
+
+        {/* 실시간으로 함께 뛰어노는 다른 접속자들의 복쓸덩이 */}
+        <OtherPlayers players={remotePlayers} hideLabels={isAnyModalOpen} />
 
         {wishes.map((w) => (
           <WishPouchObject
@@ -415,7 +641,7 @@ export default function App() {
         />
       </Canvas>
 
-      {/* --- Level 2 (HUD): 하단 안전 영역(bottom-4)에 맞춘 조이스틱 & 소원지 작성 버튼 --- */}
+      {/* --- Level 2 (HUD): 하단 조이스틱 & 인사하기 / 소원지 작성 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
@@ -429,7 +655,17 @@ export default function App() {
           />
         </div>
 
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex items-center gap-2">
+          {/* 실시간 인사(이모티콘) 버튼 */}
+          <button
+            onClick={handleTriggerEmote}
+            className="h-12 px-3.5 rounded-2xl bg-white/90 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 transition transform active:scale-95"
+            title="주변 복쓸덩이들에게 인사하기"
+          >
+            <Smile className="w-4 h-4 text-amber-500 shrink-0" />
+            <span>인사</span>
+          </button>
+
           <button
             onClick={() => setIsWriteModalOpen(true)}
             className={`h-12 px-4 md:px-6 rounded-2xl font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border-2 ${
@@ -439,14 +675,72 @@ export default function App() {
             }`}
           >
             <ScrollText className="w-4 h-4 shrink-0" />
-            <span>
-              {isNearTree ? '소원지 올리기 ✨' : '소원지 작성'}
-            </span>
+            <span>{isNearTree ? '소원지 올리기 ✨' : '소원지 작성'}</span>
           </button>
         </div>
       </div>
 
-      {/* --- Level 3 (z-50): 소원 작성 & 상세 열람 모달 --- */}
+      {/* --- 내 복쓸덩이 이름/머리끈 색상 변경 모달 --- */}
+      {isProfileModalOpen && (
+        <div
+          onClick={() => setIsProfileModalOpen(false)}
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <form
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={handleSaveProfile}
+            className="bg-[#fbf6e9] w-full max-w-[340px] rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-amber-900/15 pb-2.5">
+              <h3 className="text-sm font-extrabold text-stone-900">
+                🐾 내 복쓸덩이 꾸미기 ({totalOnlineCount}명 접속 중)
+              </h3>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-stone-700 mb-1">
+                내 복쓸덩이 이름
+              </label>
+              <input
+                type="text"
+                required
+                maxLength={10}
+                value={myNickname}
+                onChange={(e) => setMyNickname(e.target.value)}
+                className="w-full min-w-0 box-border px-3 py-2 rounded-xl bg-white border border-stone-300 text-sm font-bold text-stone-900"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-stone-700 mb-1.5">
+                머리끈 색상
+              </label>
+              <div className="flex gap-2">
+                {RANDOM_COLORS.map((c) => (
+                  <button
+                    type="button"
+                    key={c}
+                    onClick={() => setMyColor(c)}
+                    className={`w-8 h-8 rounded-full shadow transition ${
+                      myColor === c ? 'ring-2 ring-stone-900 scale-110' : 'opacity-60'
+                    }`}
+                    style={{ backgroundColor: c }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-2.5 bg-lime-800 hover:bg-lime-700 text-white rounded-xl text-xs font-extrabold shadow"
+            >
+              적용하기
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* --- 소원 작성 & 상세 열람 모달 --- */}
       <WishWriteModal
         isOpen={isWriteModalOpen}
         onClose={() => setIsWriteModalOpen(false)}
