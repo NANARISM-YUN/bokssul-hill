@@ -10,9 +10,17 @@ import {
   Compass,
   Users,
   Smile,
+  Footprints,
 } from 'lucide-react';
 
-import type { Wish, Blessing, CameraMode, RemotePlayer } from './types/wish';
+import type {
+  Wish,
+  Blessing,
+  CameraMode,
+  RemotePlayer,
+  PlayerAction,
+  RollingOrb,
+} from './types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './utils/terrain';
 import { supabase } from './utils/supabase';
 import {
@@ -23,15 +31,32 @@ import {
 import { BokssulPlayerAndCamera } from './components/three/BokssulPlayer';
 import { OtherPlayers } from './components/three/OtherPlayers';
 import { WishPouchObject } from './components/three/WishPouchObject';
+import {
+  ClickTargetMarker,
+  MeteorShowerEffect,
+  WishAltarAndOrbs,
+} from './components/three/InteractiveEvents';
 import { VirtualJoystick } from './components/ui/VirtualJoystick';
 import { WishWriteModal, WishDetailModal } from './components/ui/WishModals';
 
-const RANDOM_COLORS = ['#e53935', '#fb8c00', '#d81b60', '#43a047', '#1e88e5', '#8e24aa'];
+const RANDOM_COLORS = [
+  '#e53935',
+  '#fb8c00',
+  '#d81b60',
+  '#43a047',
+  '#1e88e5',
+  '#8e24aa',
+];
+
+const INITIAL_ORBS: RollingOrb[] = [
+  { id: 1, x: -4.5, z: 9.0, vx: 0, vz: 0, collected: false },
+  { id: 2, x: 4.8, z: 8.5, vx: 0, vz: 0, collected: false },
+  { id: 3, x: 0.2, z: 12.2, vx: 0, vz: 0, collected: false },
+];
 
 export default function App() {
   const TARGET_BLESSINGS = 3;
 
-  // 내 고유 ID 및 복쓸덩이 프로필
   const myIdRef = useRef<string>(
     'user_' + Math.random().toString(36).substring(2, 9)
   );
@@ -45,15 +70,32 @@ export default function App() {
       localStorage.getItem('bokssul_color') ||
       RANDOM_COLORS[Math.floor(Math.random() * RANDOM_COLORS.length)]
   );
+  const [myAction, setMyAction] = useState<PlayerAction>('idle');
   const [myEmote, setMyEmote] = useState<string | null>(null);
+  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // 다른 실시간 접속자 목록
+  // 바닥 클릭 이동 & 기차놀이(따라가기) 상태
+  const [clickTarget, setClickTarget] = useState<{ x: number; z: number } | null>(
+    null
+  );
+  const [followingId, setFollowingId] = useState<string | null>(null);
+
+  // 협동 복구슬 & 유성우 이벤트 상태
+  const orbsRef = useRef<RollingOrb[]>(INITIAL_ORBS);
+  const [orbsState, setOrbsState] = useState<RollingOrb[]>(INITIAL_ORBS);
+  const [meteorActive, setMeteorActive] = useState(false);
+
   const [remotePlayers, setRemotePlayers] = useState<
     Record<string, RemotePlayer>
   >({});
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const myLatestCoordsRef = useRef({ x: 0, z: 8.5, rot: Math.PI, isMoving: false });
+  const myLatestCoordsRef = useRef({
+    x: 0,
+    z: 8.5,
+    rot: Math.PI,
+    isMoving: false,
+  });
 
   const [wishes, setWishes] = useState<Wish[]>([
     {
@@ -170,7 +212,7 @@ export default function App() {
   >(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(
-    '소원지를 걸고 이웃의 소원에 정성 어린 덕담을 남겨보세요!'
+    '바닥을 터치해 산책하거나 황금 복구슬 3개를 제단에 모아 별똥별을 불러보세요!'
   );
 
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -180,8 +222,33 @@ export default function App() {
   const selectedWish = wishes.find((w) => w.id === selectedWishId) || null;
   const isAnyModalOpen =
     isWriteModalOpen || Boolean(selectedWishId) || isProfileModalOpen;
+  const followingPlayer = followingId ? remotePlayers[followingId] || null : null;
 
-  // --- Supabase Realtime 멀티플레이 채널 연결 ---
+  // 유성우 발동 및 리스폰 트리거
+  const triggerMeteorFestival = useCallback(() => {
+    setMeteorActive(true);
+    setIsNightMode(true);
+    setCameraMode('sky');
+    setFocusedTarget(null);
+    setBannerMessage(
+      '🌠 복구슬 3개가 모두 모여 밤하늘에 소원 유성우(별똥별)가 쏟아집니다!'
+    );
+
+    setTimeout(() => {
+      setMeteorActive(false);
+      const respawned = INITIAL_ORBS.map((o) => ({
+        ...o,
+        x: (Math.random() - 0.5) * 12,
+        z: 7.5 + Math.random() * 6,
+        collected: false,
+      }));
+      orbsRef.current = respawned;
+      setOrbsState(respawned);
+      setBannerMessage('🔮 동산에 새로운 황금 복구슬 3개가 다시 나타났습니다!');
+    }, 10000);
+  }, []);
+
+  // --- Supabase Realtime 멀티플레이 채널 ---
   useEffect(() => {
     const myId = myIdRef.current;
     const channel = supabase.channel('bokssul-hill-room', {
@@ -193,7 +260,6 @@ export default function App() {
 
     channelRef.current = channel;
 
-    // 1. 접속자 입/퇴장 감지 (Presence)
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState();
       setRemotePlayers((prev) => {
@@ -210,6 +276,7 @@ export default function App() {
             z: existing?.z ?? info.z ?? 8.5,
             rot: existing?.rot ?? info.rot ?? Math.PI,
             isMoving: existing?.isMoving ?? false,
+            action: existing?.action ?? 'idle',
             emote: existing?.emote ?? null,
             lastSeen: Date.now(),
           };
@@ -218,7 +285,6 @@ export default function App() {
       });
     });
 
-    // 2. 다른 복쓸덩이 실시간 이동 좌표 수신 (Broadcast)
     channel.on('broadcast', { event: 'player-move' }, ({ payload }) => {
       if (!payload || payload.id === myId) return;
       setRemotePlayers((prev) => ({
@@ -232,13 +298,22 @@ export default function App() {
           z: payload.z,
           rot: payload.rot,
           isMoving: payload.isMoving,
+          action: payload.action ?? prev[payload.id]?.action ?? 'idle',
           emote: payload.emote ?? prev[payload.id]?.emote ?? null,
           lastSeen: Date.now(),
         },
       }));
     });
 
-    // 3. 다른 유저가 건 소원/덕담/별승천 실시간 동기화
+    channel.on('broadcast', { event: 'orb-sync' }, ({ payload }) => {
+      if (!payload || !payload.orbs) return;
+      orbsRef.current = payload.orbs;
+      setOrbsState(payload.orbs);
+      if (payload.meteorTriggered) {
+        triggerMeteorFestival();
+      }
+    });
+
     channel.on('broadcast', { event: 'wish-sync' }, ({ payload }) => {
       if (!payload || !payload.wishes) return;
       const incoming = (payload.wishes as Wish[]).map((w) => ({
@@ -246,12 +321,8 @@ export default function App() {
         isMine: false,
       }));
       setWishes(incoming);
-      if (payload.banner) {
-        setBannerMessage(payload.banner);
-      }
-      if (payload.nightMode !== undefined) {
-        setIsNightMode(payload.nightMode);
-      }
+      if (payload.banner) setBannerMessage(payload.banner);
+      if (payload.nightMode !== undefined) setIsNightMode(payload.nightMode);
     });
 
     channel.subscribe(async (status) => {
@@ -270,9 +341,8 @@ export default function App() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [myNickname, myColor]);
+  }, [myNickname, myColor, triggerMeteorFestival]);
 
-  // 내 위치 브로드캐스트 콜백
   const handlePositionBroadcast = useCallback(
     (coords: { x: number; z: number; rot: number; isMoving: boolean }) => {
       myLatestCoordsRef.current = coords;
@@ -285,18 +355,19 @@ export default function App() {
           nickname: myNickname,
           color: myColor,
           ...coords,
+          action: myAction,
           emote: myEmote,
         },
       });
     },
-    [myNickname, myColor, myEmote]
+    [myNickname, myColor, myAction, myEmote]
   );
 
-  // 인사/감정표현 보내기
-  const handleTriggerEmote = () => {
-    const emotes = ['👋 반가워개!', '❤️ 복 받으시개!', '✨ 소원 성취!', '🐾 멍멍!'];
-    const picked = emotes[Math.floor(Math.random() * emotes.length)];
-    setMyEmote(picked);
+  // 4대 바디랭귀지 모션 실행
+  const handleTriggerAction = (action: PlayerAction, label: string) => {
+    setMyAction(action);
+    setMyEmote(label);
+    setIsActionMenuOpen(false);
 
     if (channelRef.current) {
       channelRef.current.send({
@@ -307,15 +378,51 @@ export default function App() {
           nickname: myNickname,
           color: myColor,
           ...myLatestCoordsRef.current,
-          emote: picked,
+          action,
+          emote: label,
         },
       });
     }
 
-    setTimeout(() => {
-      setMyEmote(null);
-    }, 3000);
+    if (action !== 'sit') {
+      setTimeout(() => {
+        setMyAction('idle');
+        setMyEmote(null);
+      }, 2800);
+    } else {
+      setTimeout(() => setMyEmote(null), 2500);
+    }
   };
+
+  // 복구슬 밀었을 때 실시간 동기화 & 3개 달성 시 유성우 발동
+  const handleOrbPushed = useCallback(
+    (nextOrbs: RollingOrb[]) => {
+      setOrbsState([...nextOrbs]);
+      const allCollected = nextOrbs.every((o) => o.collected);
+
+      if (channelRef.current) {
+        channelRef.current.send({
+          type: 'broadcast',
+          event: 'orb-sync',
+          payload: {
+            orbs: nextOrbs,
+            meteorTriggered: allCollected && !meteorActive,
+          },
+        });
+      }
+
+      if (allCollected && !meteorActive) {
+        triggerMeteorFestival();
+      }
+    },
+    [meteorActive, triggerMeteorFestival]
+  );
+
+  // 친구와 박치기 하이파이브 시 알림
+  const handleHighFive = useCallback((friendName: string) => {
+    setMyEmote(`⚡ ${friendName}님과 복 박치기!`);
+    setTimeout(() => setMyEmote(null), 2200);
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -335,7 +442,8 @@ export default function App() {
 
   const hangingCount = wishes.filter((w) => w.status === 'hanging').length;
   const starCount = wishes.filter((w) => w.status === 'star').length;
-  const totalOnlineCount = Object.keys(remotePlayers).length + 1;
+  const remoteList = Object.values(remotePlayers);
+  const totalOnlineCount = remoteList.length + 1;
 
   const broadcastWishes = (
     nextWishes: Wish[],
@@ -446,7 +554,7 @@ export default function App() {
         return finalWishes;
       });
       setBannerMessage(
-        `⭐ '${target.nickname}'님의 소원이 별이 되었습니다! 하늘의 별을 터치해보세요.`
+        `⭐ '${target.nickname}'님의 소원이 별이 되었습니다! 화면을 돌려 별을 터치해보세요.`
       );
     }, 3400);
   };
@@ -460,6 +568,18 @@ export default function App() {
     setIsProfileModalOpen(false);
   };
 
+  // 친구 따라가기(기차놀이) 토글
+  const handleToggleFollow = (targetId?: string) => {
+    if (targetId) {
+      setFollowingId((prev) => (prev === targetId ? null : targetId));
+      setClickTarget(null);
+    } else if (remoteList.length > 0) {
+      const nextFriend = remoteList[0];
+      setFollowingId((prev) => (prev ? null : nextFriend.id));
+      setClickTarget(null);
+    }
+  };
+
   return (
     <div
       className={`fixed inset-0 w-full h-[100dvh] overflow-hidden select-none transition-colors duration-1000 ${
@@ -468,9 +588,8 @@ export default function App() {
           : 'bg-gradient-to-b from-[#689f38] via-[#9ccc65] to-[#dcedc8]'
       }`}
     >
-      {/* --- Level 2 (HUD): 높이 44px(h-11) 상단 바 --- */}
+      {/* --- Level 2 (HUD): 상단 바 --- */}
       <header className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-1.5 pointer-events-none">
-        {/* 좌측 브랜드 로고 & 실시간 접속자 수 배지 */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
           <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-2.5 md:px-3.5 rounded-2xl shadow-lg border border-amber-900/20 flex items-center gap-2 shrink-0">
             <div className="w-7 h-7 rounded-xl bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-xs shadow-inner border border-amber-400/50">
@@ -481,16 +600,29 @@ export default function App() {
             </h1>
           </div>
 
-          {/* 실시간 동시 접속자 수 & 내 프로필 설정 버튼 */}
           <button
             onClick={() => setIsProfileModalOpen(true)}
             className="h-11 bg-stone-900/85 hover:bg-stone-900 backdrop-blur-md px-2.5 rounded-2xl shadow-lg border border-white/15 flex items-center gap-1.5 text-white text-[11px] font-extrabold transition shrink-0"
-            title="내 복쓸덩이 이름/색상 바꾸기"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             <Users className="w-3.5 h-3.5 text-emerald-300" />
             <span>{totalOnlineCount}명</span>
           </button>
+
+          {/* [3번 & 6번] 접속한 친구가 있을 때 바로 찾아가 기차놀이하는 버튼 */}
+          {remoteList.length > 0 && (
+            <button
+              onClick={() => handleToggleFollow()}
+              className={`h-11 px-2.5 rounded-2xl shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition shrink-0 ${
+                followingId
+                  ? 'bg-amber-400 text-stone-950 ring-2 ring-white animate-pulse'
+                  : 'bg-[#fcf9f2]/95 text-stone-800 border border-stone-300'
+              }`}
+            >
+              <Footprints className="w-3.5 h-3.5 shrink-0" />
+              <span>{followingId ? '기차놀이 중' : '친구 따라가기'}</span>
+            </button>
+          )}
         </div>
 
         {/* 우측 시점 전환 & 낮밤 스위치 */}
@@ -530,6 +662,9 @@ export default function App() {
                 setFocusedTarget(null);
                 setCameraMode('sky');
                 setIsNightMode(true);
+                setBannerMessage(
+                  '🌌 밤하늘을 드래그해 둘러보고 빛나는 별을 터치해 소원을 확인해보세요!'
+                );
               }}
               className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
                 cameraMode === 'sky'
@@ -572,7 +707,7 @@ export default function App() {
 
       {/* --- Level 1: 3D WebGL 캔버스 --- */}
       <Canvas shadows camera={{ position: [0, 9.5, 19.5], fov: 45 }}>
-        <ambientLight intensity={isNightMode ? 0.42 : 0.85} />
+        <ambientLight intensity={isNightMode ? 0.45 : 0.85} />
         <directionalLight
           position={[14, 24, 16]}
           intensity={isNightMode ? 0.45 : 1.3}
@@ -581,7 +716,7 @@ export default function App() {
         />
 
         <Sparkles
-          count={isNightMode ? 200 : 65}
+          count={isNightMode ? 220 : 65}
           scale={[42, 26, 42]}
           position={[0, 10, 0]}
           size={isNightMode ? 4 : 3}
@@ -589,18 +724,47 @@ export default function App() {
           color="#fef08a"
         />
 
+        {/* 밤하늘 협동 유성우 이펙트 */}
+        <MeteorShowerEffect active={meteorActive} />
+
         <TraditionalClouds isNightMode={isNightMode} />
-        <UnifiedHillTerrain />
+        <UnifiedHillTerrain
+          onGroundClick={(pt) => {
+            if (myAction === 'sit') setMyAction('idle');
+            setFollowingId(null);
+            setFocusedTarget(null);
+            setCameraMode('follow');
+            setClickTarget(pt);
+          }}
+        />
+
+        {/* 바닥 클릭 이동 물결 마커 & 협동 복구슬 제단 */}
+        <ClickTargetMarker target={clickTarget} />
+        <WishAltarAndOrbs
+          orbs={orbsState}
+          hideLabels={isAnyModalOpen}
+          meteorActive={meteorActive}
+        />
+
         <WishTreeAndGuardian
-          onOpenWrite={() => setIsWriteModalOpen(true)}
+          onPetGuardian={() => {
+            handleTriggerAction('jump', '🐾 복쓸싸리님 쓰담쓰담!');
+          }}
           hideLabels={isAnyModalOpen}
           showGreeting={isNearTree}
         />
 
-        {/* 내 복쓸덩이 캐릭터 */}
         <BokssulPlayerAndCamera
           keys={keys}
           joystickVec={joystickVec}
+          clickTarget={clickTarget}
+          clearClickTarget={() => setClickTarget(null)}
+          followingPlayer={followingPlayer}
+          stopFollowing={() => setFollowingId(null)}
+          remotePlayers={remotePlayers}
+          orbsRef={orbsRef}
+          onOrbPushed={handleOrbPushed}
+          onHighFive={handleHighFive}
           controlsRef={controlsRef}
           cameraMode={cameraMode}
           focusedTarget={focusedTarget}
@@ -608,12 +772,17 @@ export default function App() {
           hideLabels={isAnyModalOpen}
           myNickname={myNickname}
           myColor={myColor}
+          myAction={myAction}
           myEmote={myEmote}
           onPositionBroadcast={handlePositionBroadcast}
         />
 
-        {/* 실시간으로 함께 뛰어노는 다른 접속자들의 복쓸덩이 */}
-        <OtherPlayers players={remotePlayers} hideLabels={isAnyModalOpen} />
+        <OtherPlayers
+          players={remotePlayers}
+          hideLabels={isAnyModalOpen}
+          followingId={followingId}
+          onSelectFollow={(id) => handleToggleFollow(id)}
+        />
 
         {wishes.map((w) => (
           <WishPouchObject
@@ -633,21 +802,24 @@ export default function App() {
         <OrbitControls
           ref={controlsRef}
           target={[0, 5.0, 0]}
-          minPolarAngle={0.05}
-          maxPolarAngle={Math.PI / 2 + 0.28}
-          minDistance={5}
-          maxDistance={36}
+          minPolarAngle={0.02}
+          maxPolarAngle={
+            cameraMode === 'sky' ? Math.PI - 0.15 : Math.PI / 2 + 0.28
+          }
+          minDistance={4}
+          maxDistance={38}
           enablePan={false}
         />
       </Canvas>
 
-      {/* --- Level 2 (HUD): 하단 조이스틱 & 인사하기 / 소원지 작성 버튼 --- */}
+      {/* --- Level 2 (HUD): 하단 조이스틱 & 4대 몸짓 액션 휠 & 소원지 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
             onMove={(vec) => {
               joystickVec.current = vec;
               if (Math.hypot(vec.x, vec.y) > 0.1) {
+                if (myAction === 'sit') setMyAction('idle');
                 setFocusedTarget(null);
                 setCameraMode('follow');
               }
@@ -655,32 +827,71 @@ export default function App() {
           />
         </div>
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          {/* 실시간 인사(이모티콘) 버튼 */}
-          <button
-            onClick={handleTriggerEmote}
-            className="h-12 px-3.5 rounded-2xl bg-white/90 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 transition transform active:scale-95"
-            title="주변 복쓸덩이들에게 인사하기"
-          >
-            <Smile className="w-4 h-4 text-amber-500 shrink-0" />
-            <span>인사</span>
-          </button>
+        <div className="pointer-events-auto flex flex-col items-end gap-2">
+          {/* [4번] 펼쳐지는 4대 비언어 바디랭귀지 버튼 메뉴 */}
+          {isActionMenuOpen && (
+            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border-2 border-amber-900/20 flex items-center gap-1 animate-bounce">
+              <button
+                onClick={() => handleTriggerAction('jump', '🙌 만세 점프!')}
+                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
+              >
+                🙌 점프
+              </button>
+              <button
+                onClick={() => handleTriggerAction('roll', '🌀 데구르르!')}
+                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
+              >
+                🌀 구르기
+              </button>
+              <button
+                onClick={() => handleTriggerAction('bow', '🙇 복 받으시개!')}
+                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
+              >
+                🙇 절하기
+              </button>
+              <button
+                onClick={() =>
+                  handleTriggerAction(
+                    myAction === 'sit' ? 'idle' : 'sit',
+                    myAction === 'sit' ? '🐾 산책 출발!' : '🍞 식빵 굽는 중...'
+                  )
+                }
+                className={`px-2.5 py-2 rounded-xl text-[11px] font-extrabold transition ${
+                  myAction === 'sit'
+                    ? 'bg-lime-800 text-white'
+                    : 'bg-amber-100 hover:bg-amber-200 text-stone-900'
+                }`}
+              >
+                🍞 앉기
+              </button>
+            </div>
+          )}
 
-          <button
-            onClick={() => setIsWriteModalOpen(true)}
-            className={`h-12 px-4 md:px-6 rounded-2xl font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border-2 ${
-              isNearTree
-                ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white ring-4 ring-amber-300/60 animate-pulse'
-                : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'
-            }`}
-          >
-            <ScrollText className="w-4 h-4 shrink-0" />
-            <span>{isNearTree ? '소원지 올리기 ✨' : '소원지 작성'}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
+              className="h-12 px-3.5 rounded-2xl bg-white/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1.5 transition transform active:scale-95"
+            >
+              <Smile className="w-4 h-4 text-amber-500 shrink-0" />
+              <span>몸짓</span>
+            </button>
+
+            <button
+              onClick={() => setIsWriteModalOpen(true)}
+              className={`h-12 px-4 md:px-5 rounded-2xl font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border-2 ${
+                isNearTree
+                  ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white ring-4 ring-amber-300/60 animate-pulse'
+                  : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'
+              }`}
+            >
+              <ScrollText className="w-4 h-4 shrink-0" />
+              <span>{isNearTree ? '소원지 올리기 ✨' : '소원지 작성'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* --- 내 복쓸덩이 이름/머리끈 색상 변경 모달 --- */}
+      {/* --- 내 복쓸덩이 프로필 모달 --- */}
       {isProfileModalOpen && (
         <div
           onClick={() => setIsProfileModalOpen(false)}
@@ -722,7 +933,9 @@ export default function App() {
                     key={c}
                     onClick={() => setMyColor(c)}
                     className={`w-8 h-8 rounded-full shadow transition ${
-                      myColor === c ? 'ring-2 ring-stone-900 scale-110' : 'opacity-60'
+                      myColor === c
+                        ? 'ring-2 ring-stone-900 scale-110'
+                        : 'opacity-60'
                     }`}
                     style={{ backgroundColor: c }}
                   />
@@ -740,7 +953,6 @@ export default function App() {
         </div>
       )}
 
-      {/* --- 소원 작성 & 상세 열람 모달 --- */}
       <WishWriteModal
         isOpen={isWriteModalOpen}
         onClose={() => setIsWriteModalOpen(false)}

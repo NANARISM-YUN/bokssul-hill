@@ -21,7 +21,8 @@ export interface Wish {
 
 export type CameraMode = 'follow' | 'tree' | 'sky';
 
-// 실시간 멀티플레이 접속자 데이터 구조
+export type PlayerAction = 'idle' | 'jump' | 'roll' | 'bow' | 'sit';
+
 export interface RemotePlayer {
   id: string;
   nickname: string;
@@ -30,6 +31,16 @@ export interface RemotePlayer {
   z: number;
   rot: number;
   isMoving: boolean;
+  action?: PlayerAction;
   emote?: string | null;
   lastSeen: number;
+}
+
+export interface RollingOrb {
+  id: number;
+  x: number;
+  z: number;
+  vx: number;
+  vz: number;
+  collected: boolean;
 }

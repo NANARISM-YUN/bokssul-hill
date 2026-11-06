@@ -1,6 +1,6 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Float } from '@react-three/drei';
+import { Html, Float, Sparkles } from '@react-three/drei';
 import * as THREE from 'three';
 import { getTerrainHeight } from '../../utils/terrain';
 
@@ -49,7 +49,13 @@ export const TraditionalClouds = ({ isNightMode }: { isNightMode: boolean }) => 
   );
 };
 
-export const UnifiedHillTerrain = () => {
+export const UnifiedHillTerrain = ({
+  onGroundClick,
+}: {
+  onGroundClick?: (pt: { x: number; z: number }) => void;
+}) => {
+  const pointerDownPos = useRef({ x: 0, y: 0 });
+
   const terrainGeo = useMemo(() => {
     const geo = new THREE.PlaneGeometry(64, 64, 110, 110);
     geo.rotateX(-Math.PI / 2);
@@ -95,7 +101,24 @@ export const UnifiedHillTerrain = () => {
 
   return (
     <group>
-      <mesh geometry={terrainGeo} receiveShadow>
+      <mesh
+        geometry={terrainGeo}
+        receiveShadow
+        onPointerDown={(e) => {
+          pointerDownPos.current = { x: e.clientX, y: e.clientY };
+        }}
+        onClick={(e) => {
+          // 화면 회전 드래그와 단순 바닥 터치를 구분
+          const dragDist = Math.hypot(
+            e.clientX - pointerDownPos.current.x,
+            e.clientY - pointerDownPos.current.y
+          );
+          if (dragDist < 12 && onGroundClick) {
+            e.stopPropagation();
+            onGroundClick({ x: e.point.x, z: e.point.z });
+          }
+        }}
+      >
         <meshToonMaterial vertexColors />
       </mesh>
 
@@ -130,24 +153,41 @@ export const UnifiedHillTerrain = () => {
 };
 
 export const WishTreeAndGuardian = ({
-  onOpenWrite,
+  onPetGuardian,
   hideLabels = false,
   showGreeting = false,
 }: {
-  onOpenWrite: () => void;
+  onPetGuardian: () => void;
   hideLabels?: boolean;
   showGreeting?: boolean;
 }) => {
   const treeBaseY = getTerrainHeight(0, 0);
   const guardianY = getTerrainHeight(0, 2.3);
   const ribbonRef = useRef<THREE.Mesh>(null);
+  const guardianGroupRef = useRef<THREE.Group>(null);
+  const [pettedTimer, setPettedTimer] = useState(0);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (ribbonRef.current) {
       ribbonRef.current.rotation.z =
         Math.sin(state.clock.elapsedTime * 2) * 0.15;
     }
+    if (pettedTimer > 0 && guardianGroupRef.current) {
+      const next = Math.max(0, pettedTimer - delta);
+      setPettedTimer(next);
+      const jump = Math.abs(Math.sin(next * 14)) * 0.45;
+      guardianGroupRef.current.position.y = guardianY + jump;
+      guardianGroupRef.current.rotation.y = Math.sin(next * 18) * 0.22;
+    } else if (guardianGroupRef.current) {
+      guardianGroupRef.current.position.y = guardianY;
+      guardianGroupRef.current.rotation.y = 0;
+    }
   });
+
+  const handleTouchGuardian = () => {
+    setPettedTimer(1.8);
+    onPetGuardian();
+  };
 
   return (
     <group>
@@ -184,14 +224,27 @@ export const WishTreeAndGuardian = ({
       </group>
 
       <group
+        ref={guardianGroupRef}
         position={[0, guardianY, 2.3]}
         onClick={(e) => {
           e.stopPropagation();
-          onOpenWrite();
+          handleTouchGuardian();
         }}
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
         onPointerOut={() => (document.body.style.cursor = 'auto')}
       >
+        {/* 쓰담쓰담 시 황금 꽃비 파티클 */}
+        {pettedTimer > 0 && (
+          <Sparkles
+            count={45}
+            scale={4}
+            position={[0, 2, 0]}
+            size={6}
+            speed={2}
+            color="#facc15"
+          />
+        )}
+
         <mesh position={[0, 0.85, 0]} castShadow>
           <sphereGeometry args={[0.95, 24, 24]} />
           <meshToonMaterial color="#ffffff" />
@@ -276,17 +329,18 @@ export const WishTreeAndGuardian = ({
           </mesh>
         </group>
 
-        {/* [2-A 적용] 나무 근처로 다가갔을 때만 복쓸싸리 대사 말풍선 표시 */}
-        {!hideLabels && showGreeting && (
+        {!hideLabels && (showGreeting || pettedTimer > 0) && (
           <Html
-            position={[0, 3.1, 0]}
+            position={[0, 3.15, 0]}
             center
             distanceFactor={15}
             zIndexRange={[10, 0]}
           >
             <div className="px-3 py-1 bg-amber-50/95 border-2 border-amber-500 rounded-full shadow-lg text-center whitespace-nowrap pointer-events-none animate-bounce">
               <span className="text-[11px] font-extrabold text-amber-950">
-                🐾 복쓸싸리: "지성이면 감천이라개! 터치해서 소원을 걸어보시개"
+                {pettedTimer > 0
+                  ? '🐾 복쓸싸리: "쓰담쓰담 고맙싸리! 만복이 쏟아진다싸리 ✨"'
+                  : '🐾 복쓸싸리: "복 기운을 나눠주겠다싸리"'}
               </span>
             </div>
           </Html>

@@ -23,7 +23,6 @@ export const WishPouchObject = ({
 
   const isQiFull = wish.blessings.length >= wish.targetBlessings;
 
-  // [1-A 규칙] 평소에는 '내 소원'이나 '기운충만'만 배지를 띄우고, '나무 시점'이거나 호버 시 전체 표시
   const shouldShowHangingBadge =
     !hideLabels && (wish.isMine || isQiFull || showAllTreeLabels || hovered);
 
@@ -61,6 +60,11 @@ export const WishPouchObject = ({
     } else if (wish.status === 'star') {
       groupRef.current.position.set(...wish.starPos);
       groupRef.current.rotation.y += delta * 1.5;
+      const starScale = hovered ? 1.35 : 1.0;
+      groupRef.current.scale.lerp(
+        new THREE.Vector3(starScale, starScale, starScale),
+        10 * delta
+      );
     }
   });
 
@@ -202,18 +206,24 @@ export const WishPouchObject = ({
         </Float>
       ) : (
         <group>
+          {/* 모바일에서도 별이 아주 잘 눌리도록 2.5배 크기의 투명 터치 영역 추가 */}
           <mesh>
-            <octahedronGeometry args={[wish.isMine ? 0.85 : 0.65, 0]} />
+            <sphereGeometry args={[2.2, 12, 12]} />
+            <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+          </mesh>
+
+          <mesh>
+            <octahedronGeometry args={[wish.isMine ? 0.95 : 0.75, 0]} />
             <meshStandardMaterial
               color="#fffbeb"
               emissive={wish.isMine ? '#fbbf24' : '#f59e0b'}
-              emissiveIntensity={wish.isMine ? 4.2 : 3.0}
+              emissiveIntensity={wish.isMine ? 4.5 : 3.2}
               toneMapped={false}
             />
           </mesh>
           {wish.isMine && (
             <mesh rotation={[Math.PI / 3, 0, 0]}>
-              <torusGeometry args={[1.25, 0.04, 12, 32]} />
+              <torusGeometry args={[1.35, 0.05, 12, 32]} />
               <meshBasicMaterial color="#fde047" />
             </mesh>
           )}
@@ -227,9 +237,9 @@ export const WishPouchObject = ({
           />
           {!hideLabels && (
             <Html
-              position={[0, -1.0, 0]}
+              position={[0, -1.15, 0]}
               center
-              distanceFactor={18}
+              distanceFactor={20}
               zIndexRange={[10, 0]}
             >
               <button
@@ -237,13 +247,13 @@ export const WishPouchObject = ({
                   e.stopPropagation();
                   onSelect(wish);
                 }}
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-extrabold shadow-xl whitespace-nowrap transition flex items-center gap-1 ${
+                className={`px-3 py-1 rounded-full text-xs font-extrabold shadow-xl whitespace-nowrap transition transform active:scale-95 flex items-center gap-1 ${
                   wish.isMine
                     ? 'bg-amber-400 text-stone-950 ring-2 ring-white'
-                    : 'bg-yellow-400/25 hover:bg-yellow-400/50 backdrop-blur-md border border-yellow-300/60 text-yellow-100'
+                    : 'bg-indigo-950/85 hover:bg-indigo-900 backdrop-blur-md border border-amber-300/80 text-amber-200'
                 }`}
               >
-                {wish.isMine ? '👑' : '⭐'} {wish.nickname}별
+                {wish.isMine ? '👑' : '⭐'} {wish.nickname}님의 별 보기
               </button>
             </Html>
           )}
