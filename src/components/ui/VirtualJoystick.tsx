@@ -2,8 +2,10 @@ import React, { useState, useRef } from 'react';
 
 export const VirtualJoystick = ({
   onMove,
+  onDragChange,
 }: {
   onMove: (vec: { x: number; y: number }) => void;
+  onDragChange?: (dragging: boolean) => void;
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [knobPos, setKnobPos] = useState({ x: 0, y: 0 });
@@ -32,22 +34,32 @@ export const VirtualJoystick = ({
     });
   };
 
-  const handleReset = () => {
+  const handleReset = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
     setIsDragging(false);
+    onDragChange?.(false);
     setKnobPos({ x: 0, y: 0 });
     onMove({ x: 0, y: 0 });
   };
 
   return (
-    <div className="flex flex-col items-center gap-1 select-none touch-none">
+    <div
+      className="p-2 -m-2 select-none touch-none"
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      onTouchMove={(e) => e.stopPropagation()}
+    >
       <div
         ref={containerRef}
         onPointerDown={(e) => {
+          e.stopPropagation();
           e.currentTarget.setPointerCapture(e.pointerId);
           setIsDragging(true);
+          onDragChange?.(true);
           updateStick(e.clientX, e.clientY);
         }}
         onPointerMove={(e) => {
+          e.stopPropagation();
           if (!isDragging) return;
           updateStick(e.clientX, e.clientY);
         }}

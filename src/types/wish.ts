@@ -42,5 +42,6 @@ export interface RollingOrb {
   z: number;
   vx: number;
   vz: number;
+  color: string;
   collected: boolean;
 }

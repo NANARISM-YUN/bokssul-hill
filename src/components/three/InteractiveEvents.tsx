@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import type { RollingOrb } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 
-// 1. 바닥 터치 이동 시 나타나는 물결 마커
+// 1. 바닥 터치 이동 물결 마커
 export const ClickTargetMarker = ({
   target,
 }: {
@@ -15,27 +15,23 @@ export const ClickTargetMarker = ({
 
   useFrame((state) => {
     if (!ringRef.current || !target) return;
-    const s = 0.8 + Math.sin(state.clock.elapsedTime * 8) * 0.25;
+    const s = 0.75 + Math.sin(state.clock.elapsedTime * 8) * 0.2;
     ringRef.current.scale.set(s, s, 1);
   });
 
   if (!target) return null;
-  const y = getTerrainHeight(target.x, target.z) + 0.08;
+  const y = getTerrainHeight(target.x, target.z) + 0.12;
 
   return (
     <group position={[target.x, y, target.z]}>
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[0.35, 0.55, 24]} />
+        <ringGeometry args={[0.3, 0.48, 24]} />
         <meshBasicMaterial
           color="#fde047"
           side={THREE.DoubleSide}
           transparent
           opacity={0.9}
         />
-      </mesh>
-      <mesh position={[0, 0.25, 0]}>
-        <coneGeometry args={[0.18, 0.35, 12]} />
-        <meshBasicMaterial color="#facc15" />
       </mesh>
     </group>
   );
@@ -97,7 +93,71 @@ export const MeteorShowerEffect = ({ active }: { active: boolean }) => {
   );
 };
 
-// 3. 동산의 복구슬 모으기 제단 & 굴러다니는 복구슬
+// 개별 복구슬 (구르는 회전 모션 + 바구니에 쏙 빠지는 낙하 애니메이션)
+const SingleRollingOrbMesh = ({
+  orb,
+  altarX,
+  altarZ,
+}: {
+  orb: RollingOrb;
+  altarX: number;
+  altarZ: number;
+}) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
+  const sinkProgress = useRef(0);
+
+  useFrame((_, delta) => {
+    if (!groupRef.current || !meshRef.current) return;
+
+    if (orb.collected) {
+      // 바구니 중앙 구멍으로 빨려 들어가며 아래로 쏙 빠지는 연출
+      sinkProgress.current = Math.min(1, sinkProgress.current + delta * 2.8);
+      const p = sinkProgress.current;
+      const altarY = getTerrainHeight(altarX, altarZ);
+
+      const curX = THREE.MathUtils.lerp(orb.x, altarX, p * 0.85);
+      const curZ = THREE.MathUtils.lerp(orb.z, altarZ, p * 0.85);
+      const curY = altarY + 0.65 - p * 1.1;
+      const scale = Math.max(0.01, 1 - p * 0.95);
+
+      groupRef.current.position.set(curX, curY, curZ);
+      groupRef.current.scale.set(scale, scale, scale);
+    } else {
+      sinkProgress.current = 0;
+      const y = getTerrainHeight(orb.x, orb.z) + 0.52;
+      groupRef.current.position.lerp(new THREE.Vector3(orb.x, y, orb.z), 18 * delta);
+      groupRef.current.scale.set(1, 1, 1);
+
+      // 이동 속도에 맞춰 실제로 데구르르 회전
+      meshRef.current.rotation.x += orb.vz * delta * 2.2;
+      meshRef.current.rotation.z -= orb.vx * delta * 2.2;
+    }
+  });
+
+  if (orb.collected && sinkProgress.current >= 1) return null;
+
+  return (
+    <group
+      ref={groupRef}
+      position={[orb.x, getTerrainHeight(orb.x, orb.z) + 0.52, orb.z]}
+    >
+      <mesh ref={meshRef} castShadow>
+        <icosahedronGeometry args={[0.52, 2]} />
+        <meshStandardMaterial
+          color={orb.color}
+          emissive={orb.color}
+          emissiveIntensity={0.65}
+          roughness={0.15}
+          metalness={0.1}
+        />
+      </mesh>
+      <Sparkles count={8} scale={1.3} size={3} color="#ffffff" />
+    </group>
+  );
+};
+
+// 3. 입체 복바구니(포켓) & 오색 복구슬들
 export const WishAltarAndOrbs = ({
   orbs,
   hideLabels,
@@ -108,97 +168,93 @@ export const WishAltarAndOrbs = ({
   meteorActive: boolean;
 }) => {
   const altarX = 0;
-  const altarZ = 6.2;
-  const altarY = getTerrainHeight(altarX, altarZ) + 0.05;
+  const altarZ = 6.0;
+  const altarY = getTerrainHeight(altarX, altarZ);
   const collectedCount = orbs.filter((o) => o.collected).length;
 
   return (
     <group>
-      {/* 황금 기원 제단 (마법진) */}
+      {/* 언덕 경사에 파묻히지 않는 입체 오목 복바구니 (포켓 홀) */}
       <group position={[altarX, altarY, altarZ]}>
-        <mesh rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[1.4, 1.75, 32]} />
-          <meshBasicMaterial
-            color={meteorActive ? '#fef08a' : '#f59e0b'}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
-          <circleGeometry args={[1.6, 32]} />
-          <meshBasicMaterial
-            color="#fde047"
-            transparent
-            opacity={meteorActive ? 0.55 : 0.22}
-            side={THREE.DoubleSide}
-          />
+        {/* 바닥 받침대 (언덕 경사 보정용 원통 베이스) */}
+        <mesh position={[0, -0.1, 0]} receiveShadow>
+          <cylinderGeometry args={[1.65, 1.85, 0.55, 28]} />
+          <meshToonMaterial color="#5d4037" />
         </mesh>
 
-        {/* 제단에 모인 작은 구슬 표시 */}
+        {/* 오목한 바구니 외벽 */}
+        <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[1.55, 1.25, 0.55, 28, 1, true]} />
+          <meshToonMaterial color="#8d6e63" side={THREE.DoubleSide} />
+        </mesh>
+
+        {/* 바구니 입구 황금 밧줄 테두리 */}
+        <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[1.52, 0.12, 12, 32]} />
+          <meshToonMaterial color={meteorActive ? '#fef08a' : '#facc15'} />
+        </mesh>
+
+        {/* 구슬이 쏙 빠지는 바구니 안쪽 깊은 홀(구멍) */}
+        <mesh position={[0, 0.18, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.38, 28]} />
+          <meshBasicMaterial color={meteorActive ? '#fef08a' : '#1c1917'} />
+        </mesh>
+
+        {/* 바구니 테두리에 박힌 수집 현황 보석 3개 */}
         {[0, 1, 2].map((idx) => {
-          const angle = (idx * Math.PI * 2) / 3;
+          const angle = (idx * Math.PI * 2) / 3 - Math.PI / 2;
           const isFilled = idx < collectedCount || meteorActive;
           return (
             <mesh
               key={idx}
-              position={[Math.cos(angle) * 1.1, 0.25, Math.sin(angle) * 1.1]}
+              position={[Math.cos(angle) * 1.52, 0.68, Math.sin(angle) * 1.52]}
             >
               <sphereGeometry args={[0.2, 16, 16]} />
               <meshStandardMaterial
-                color={isFilled ? '#fef08a' : '#78716c'}
+                color={isFilled ? '#fef08a' : '#44403c'}
                 emissive={isFilled ? '#f59e0b' : '#000000'}
-                emissiveIntensity={isFilled ? 2.5 : 0}
+                emissiveIntensity={isFilled ? 2.8 : 0}
               />
             </mesh>
           );
         })}
 
+        {meteorActive && (
+          <Sparkles
+            count={35}
+            scale={3}
+            position={[0, 1.2, 0]}
+            size={5}
+            color="#fde047"
+          />
+        )}
+
+        {/* 심플하고 직관적인 미니 배지 */}
         {!hideLabels && (
           <Html
-            position={[0, 0.9, 0]}
+            position={[0, 1.05, 0]}
             center
             distanceFactor={15}
             zIndexRange={[10, 0]}
           >
-            <div className="px-2.5 py-0.5 bg-amber-950/90 border border-amber-400/70 rounded-full text-[10px] font-extrabold text-amber-200 whitespace-nowrap shadow-md pointer-events-none">
+            <div className="px-2.5 py-0.5 bg-stone-900/85 backdrop-blur-sm border border-amber-400/60 rounded-full text-[10px] font-extrabold text-amber-200 whitespace-nowrap shadow-md pointer-events-none">
               {meteorActive
-                ? '🌠 밤하늘에 별똥별이 쏟아집니다!'
-                : `🔮 별똥별 제단: 황금 복구슬을 밀어 넣어보세요 (${collectedCount}/3)`}
+                ? '🌠 별똥별 축제 중!'
+                : `🧺 복바구니 ${collectedCount} / 3`}
             </div>
           </Html>
         )}
       </group>
 
-      {/* 동산에 흩어진 황금 복구슬들 */}
-      {orbs.map((orb) => {
-        if (orb.collected) return null;
-        const y = getTerrainHeight(orb.x, orb.z) + 0.55;
-        return (
-          <group key={orb.id} position={[orb.x, y, orb.z]}>
-            <mesh castShadow>
-              <sphereGeometry args={[0.55, 24, 24]} />
-              <meshStandardMaterial
-                color="#fef08a"
-                emissive="#f59e0b"
-                emissiveIntensity={1.6}
-                roughness={0.2}
-              />
-            </mesh>
-            <Sparkles count={10} scale={1.4} size={3.5} color="#fffbeb" />
-            {!hideLabels && (
-              <Html
-                position={[0, 0.85, 0]}
-                center
-                distanceFactor={15}
-                zIndexRange={[10, 0]}
-              >
-                <div className="px-2 py-0.5 bg-amber-400/95 text-stone-950 rounded-full text-[9px] font-black whitespace-nowrap shadow pointer-events-none">
-                  ✨ 복구슬 (밀어보기)
-                </div>
-              </Html>
-            )}
-          </group>
-        );
-      })}
+      {/* 오색 복구슬 렌더링 (텍스트 라벨 제거로 시야 확보) */}
+      {orbs.map((orb) => (
+        <SingleRollingOrbMesh
+          key={orb.id}
+          orb={orb}
+          altarX={altarX}
+          altarZ={altarZ}
+        />
+      ))}
     </group>
   );
 };

@@ -8,7 +8,6 @@ import {
   Star,
   ScrollText,
   Compass,
-  Users,
   Smile,
   Footprints,
 } from 'lucide-react';
@@ -48,11 +47,45 @@ const RANDOM_COLORS = [
   '#8e24aa',
 ];
 
-const INITIAL_ORBS: RollingOrb[] = [
-  { id: 1, x: -4.5, z: 9.0, vx: 0, vz: 0, collected: false },
-  { id: 2, x: 4.8, z: 8.5, vx: 0, vz: 0, collected: false },
-  { id: 3, x: 0.2, z: 12.2, vx: 0, vz: 0, collected: false },
+const ORB_PALETTE = [
+  '#ff5252', // 홍옥 (다홍)
+  '#ffd740', // 호박 (황금)
+  '#69f0ae', // 비취 (에메랄드)
+  '#40c4ff', // 청옥 (사파이어)
+  '#e040fb', // 자수정 (보라)
 ];
+
+// 동산 360도 전역에 서로 겹치지 않게 오색 복구슬 3개를 흩뿌려 생성하는 함수
+const generateScatteredOrbs = (): RollingOrb[] => {
+  const palette = [...ORB_PALETTE].sort(() => Math.random() - 0.5);
+  const baseSectorAngle = Math.random() * Math.PI * 2;
+
+  return [0, 1, 2].map((idx) => {
+    // 120도(2π/3) 간격의 3개 구역으로 나누어 구슬이 절대 한곳에 뭉치지 않도록 보장
+    const angle =
+      baseSectorAngle +
+      idx * ((Math.PI * 2) / 3) +
+      (Math.random() - 0.5) * 0.7;
+    const radius = 6.5 + Math.random() * 9.5;
+    let x = Math.cos(angle) * radius;
+    let z = Math.sin(angle) * radius;
+
+    // 복바구니(0, 6.0) 바로 위에 떨어지지 않도록 보정
+    if (Math.hypot(x - 0, z - 6.0) < 3.5) {
+      z += 4.5;
+    }
+
+    return {
+      id: idx + 1,
+      x: Number(x.toFixed(2)),
+      z: Number(z.toFixed(2)),
+      vx: 0,
+      vz: 0,
+      color: palette[idx],
+      collected: false,
+    };
+  });
+};
 
 export default function App() {
   const TARGET_BLESSINGS = 3;
@@ -75,15 +108,17 @@ export default function App() {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
-  // 바닥 클릭 이동 & 기차놀이(따라가기) 상태
+  // 조이스틱 드래그 중 카메라 회전 잠금 상태
+  const [isJoystickDragging, setIsJoystickDragging] = useState(false);
+
   const [clickTarget, setClickTarget] = useState<{ x: number; z: number } | null>(
     null
   );
   const [followingId, setFollowingId] = useState<string | null>(null);
 
-  // 협동 복구슬 & 유성우 이벤트 상태
-  const orbsRef = useRef<RollingOrb[]>(INITIAL_ORBS);
-  const [orbsState, setOrbsState] = useState<RollingOrb[]>(INITIAL_ORBS);
+  const initialOrbs = useRef<RollingOrb[]>(generateScatteredOrbs());
+  const orbsRef = useRef<RollingOrb[]>(initialOrbs.current);
+  const [orbsState, setOrbsState] = useState<RollingOrb[]>(initialOrbs.current);
   const [meteorActive, setMeteorActive] = useState(false);
 
   const [remotePlayers, setRemotePlayers] = useState<
@@ -212,7 +247,7 @@ export default function App() {
   >(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(
-    '바닥을 터치해 산책하거나 황금 복구슬 3개를 제단에 모아 별똥별을 불러보세요!'
+    '오색 복구슬 3개를 바구니에 골인시켜 별똥별을 불러보세요!'
   );
 
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -224,31 +259,31 @@ export default function App() {
     isWriteModalOpen || Boolean(selectedWishId) || isProfileModalOpen;
   const followingPlayer = followingId ? remotePlayers[followingId] || null : null;
 
-  // 유성우 발동 및 리스폰 트리거
+  // [6번] 상단 배너 토스트 3.5초 후 자동 숨김
+  useEffect(() => {
+    if (!bannerMessage) return;
+    const timer = setTimeout(() => {
+      setBannerMessage(null);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [bannerMessage]);
+
   const triggerMeteorFestival = useCallback(() => {
     setMeteorActive(true);
     setIsNightMode(true);
     setCameraMode('sky');
     setFocusedTarget(null);
-    setBannerMessage(
-      '🌠 복구슬 3개가 모두 모여 밤하늘에 소원 유성우(별똥별)가 쏟아집니다!'
-    );
+    setBannerMessage('🌠 복바구니에 구슬이 가득 차 밤하늘에 별똥별이 쏟아집니다!');
 
     setTimeout(() => {
       setMeteorActive(false);
-      const respawned = INITIAL_ORBS.map((o) => ({
-        ...o,
-        x: (Math.random() - 0.5) * 12,
-        z: 7.5 + Math.random() * 6,
-        collected: false,
-      }));
+      const respawned = generateScatteredOrbs();
       orbsRef.current = respawned;
       setOrbsState(respawned);
-      setBannerMessage('🔮 동산에 새로운 황금 복구슬 3개가 다시 나타났습니다!');
+      setBannerMessage('🔮 동산 곳곳에 새로운 오색 복구슬들이 나타났습니다!');
     }, 10000);
   }, []);
 
-  // --- Supabase Realtime 멀티플레이 채널 ---
   useEffect(() => {
     const myId = myIdRef.current;
     const channel = supabase.channel('bokssul-hill-room', {
@@ -363,7 +398,6 @@ export default function App() {
     [myNickname, myColor, myAction, myEmote]
   );
 
-  // 4대 바디랭귀지 모션 실행
   const handleTriggerAction = (action: PlayerAction, label: string) => {
     setMyAction(action);
     setMyEmote(label);
@@ -394,11 +428,16 @@ export default function App() {
     }
   };
 
-  // 복구슬 밀었을 때 실시간 동기화 & 3개 달성 시 유성우 발동
   const handleOrbPushed = useCallback(
-    (nextOrbs: RollingOrb[]) => {
+    (nextOrbs: RollingOrb[], justCollected: boolean) => {
       setOrbsState([...nextOrbs]);
-      const allCollected = nextOrbs.every((o) => o.collected);
+      const collectedCount = nextOrbs.filter((o) => o.collected).length;
+      const allCollected = collectedCount === nextOrbs.length;
+
+      if (justCollected && !allCollected) {
+        setMyEmote(`🧺 골인! (${collectedCount}/3)`);
+        setTimeout(() => setMyEmote(null), 2000);
+      }
 
       if (channelRef.current) {
         channelRef.current.send({
@@ -418,7 +457,6 @@ export default function App() {
     [meteorActive, triggerMeteorFestival]
   );
 
-  // 친구와 박치기 하이파이브 시 알림
   const handleHighFive = useCallback((friendName: string) => {
     setMyEmote(`⚡ ${friendName}님과 복 박치기!`);
     setTimeout(() => setMyEmote(null), 2200);
@@ -532,7 +570,7 @@ export default function App() {
     setIsNightMode(true);
     setCameraMode('sky');
     setFocusedTarget(null);
-    const msg = `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 소원이 밤하늘의 별로 승천합니다!`;
+    const msg = `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 소원이 별로 승천합니다!`;
     setBannerMessage(msg);
 
     const ascendingWishes = wishes.map((w) =>
@@ -553,9 +591,7 @@ export default function App() {
         );
         return finalWishes;
       });
-      setBannerMessage(
-        `⭐ '${target.nickname}'님의 소원이 별이 되었습니다! 화면을 돌려 별을 터치해보세요.`
-      );
+      setBannerMessage(`⭐ '${target.nickname}'님의 소원이 밤하늘의 별이 되었습니다!`);
     }, 3400);
   };
 
@@ -568,7 +604,6 @@ export default function App() {
     setIsProfileModalOpen(false);
   };
 
-  // 친구 따라가기(기차놀이) 토글
   const handleToggleFollow = (targetId?: string) => {
     if (targetId) {
       setFollowingId((prev) => (prev === targetId ? null : targetId));
@@ -588,98 +623,101 @@ export default function App() {
           : 'bg-gradient-to-b from-[#689f38] via-[#9ccc65] to-[#dcedc8]'
       }`}
     >
-      {/* --- Level 2 (HUD): 상단 바 --- */}
-      <header className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-1.5 pointer-events-none">
+      {/* --- [7번 개선] 좌·우 딱 2개의 캡슐로 깔끔하게 통합된 상단 바 --- */}
+      <header className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none">
+        {/* 좌측 통합 캡슐: [福 복쓸싸리 | 🟢 N명] */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
-          <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-2.5 md:px-3.5 rounded-2xl shadow-lg border border-amber-900/20 flex items-center gap-2 shrink-0">
-            <div className="w-7 h-7 rounded-xl bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-xs shadow-inner border border-amber-400/50">
-              福
-            </div>
-            <h1 className="font-extrabold text-stone-900 text-xs md:text-sm whitespace-nowrap">
-              복쓸싸리 동산
-            </h1>
-          </div>
-
           <button
             onClick={() => setIsProfileModalOpen(true)}
-            className="h-11 bg-stone-900/85 hover:bg-stone-900 backdrop-blur-md px-2.5 rounded-2xl shadow-lg border border-white/15 flex items-center gap-1.5 text-white text-[11px] font-extrabold transition shrink-0"
+            className="h-10 bg-[#fcf9f2]/95 hover:bg-white backdrop-blur-md pl-2 pr-3 rounded-full shadow-lg border border-amber-900/15 flex items-center gap-2 transition active:scale-95"
+            title="내 복쓸덩이 꾸미기"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <Users className="w-3.5 h-3.5 text-emerald-300" />
-            <span>{totalOnlineCount}명</span>
+            <div className="w-6 h-6 rounded-full bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-[11px] shadow-inner">
+              福
+            </div>
+            <span className="font-extrabold text-stone-900 text-xs whitespace-nowrap">
+              복쓸싸리
+            </span>
+            <span className="w-px h-3 bg-stone-300" />
+            <span className="flex items-center gap-1 text-[11px] font-extrabold text-emerald-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              {totalOnlineCount}
+            </span>
           </button>
 
-          {/* [3번 & 6번] 접속한 친구가 있을 때 바로 찾아가 기차놀이하는 버튼 */}
           {remoteList.length > 0 && (
             <button
               onClick={() => handleToggleFollow()}
-              className={`h-11 px-2.5 rounded-2xl shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition shrink-0 ${
+              className={`h-10 px-3 rounded-full shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition ${
                 followingId
                   ? 'bg-amber-400 text-stone-950 ring-2 ring-white animate-pulse'
                   : 'bg-[#fcf9f2]/95 text-stone-800 border border-stone-300'
               }`}
             >
               <Footprints className="w-3.5 h-3.5 shrink-0" />
-              <span>{followingId ? '기차놀이 중' : '친구 따라가기'}</span>
+              <span className="hidden sm:inline">
+                {followingId ? '기차놀이 중' : '따라가기'}
+              </span>
             </button>
           )}
         </div>
 
-        {/* 우측 시점 전환 & 낮밤 스위치 */}
-        <div className="flex items-center gap-1 pointer-events-auto">
-          <div className="h-11 bg-[#fcf9f2]/95 backdrop-blur-md px-1 rounded-2xl shadow-lg border border-stone-300 flex items-center gap-0.5">
-            <button
-              onClick={() => {
-                setFocusedTarget(null);
-                setCameraMode('follow');
-              }}
-              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
-                cameraMode === 'follow' && !focusedTarget
-                  ? 'bg-lime-800 text-white shadow'
-                  : 'text-stone-700 hover:bg-stone-200/70'
-              }`}
-            >
-              <Compass className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">산책</span>
-            </button>
+        {/* 우측 통합 캡슐: [산책 | 🌳 | ⭐ | 🌙] */}
+        <div className="h-10 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5 pointer-events-auto">
+          <button
+            onClick={() => {
+              setFocusedTarget(null);
+              setCameraMode('follow');
+            }}
+            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
+              cameraMode === 'follow' && !focusedTarget
+                ? 'bg-lime-800 text-white shadow'
+                : 'text-stone-700 hover:bg-stone-200/70'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden sm:inline">산책</span>
+          </button>
 
-            <button
-              onClick={() => {
-                setFocusedTarget(null);
-                setCameraMode('tree');
-              }}
-              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
-                cameraMode === 'tree' && !focusedTarget
-                  ? 'bg-lime-800 text-white shadow'
-                  : 'text-stone-700 hover:bg-stone-200/70'
-              }`}
-            >
-              <span>🌳({hangingCount})</span>
-            </button>
+          <button
+            onClick={() => {
+              setFocusedTarget(null);
+              setCameraMode('tree');
+            }}
+            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
+              cameraMode === 'tree' && !focusedTarget
+                ? 'bg-lime-800 text-white shadow'
+                : 'text-stone-700 hover:bg-stone-200/70'
+            }`}
+          >
+            <span>🌳</span>
+            <span>{hangingCount}</span>
+          </button>
 
-            <button
-              onClick={() => {
-                setFocusedTarget(null);
-                setCameraMode('sky');
-                setIsNightMode(true);
-                setBannerMessage(
-                  '🌌 밤하늘을 드래그해 둘러보고 빛나는 별을 터치해 소원을 확인해보세요!'
-                );
-              }}
-              className={`h-8 px-2 rounded-xl text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
-                cameraMode === 'sky'
-                  ? 'bg-indigo-950 text-amber-300 shadow'
-                  : 'text-stone-700 hover:bg-stone-200/70'
-              }`}
-            >
-              <Star className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
-              <span>({starCount})</span>
-            </button>
-          </div>
+          <button
+            onClick={() => {
+              setFocusedTarget(null);
+              setCameraMode('sky');
+              setIsNightMode(true);
+              setBannerMessage(
+                '🌌 밤하늘을 드래그해 둘러보고 별을 터치해 소원을 열어보세요!'
+              );
+            }}
+            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
+              cameraMode === 'sky'
+                ? 'bg-indigo-950 text-amber-300 shadow'
+                : 'text-stone-700 hover:bg-stone-200/70'
+            }`}
+          >
+            <Star className="w-3 h-3 fill-amber-400 text-amber-500 shrink-0" />
+            <span>{starCount}</span>
+          </button>
+
+          <span className="w-px h-4 bg-stone-300 mx-0.5" />
 
           <button
             onClick={() => setIsNightMode(!isNightMode)}
-            className="h-11 w-11 bg-[#fcf9f2]/95 hover:bg-white text-stone-800 rounded-2xl shadow-lg text-sm font-extrabold border border-stone-300 flex items-center justify-center transition shrink-0"
+            className="h-8 w-8 rounded-full hover:bg-stone-200/70 text-xs flex items-center justify-center transition"
             title="낮/밤 전환"
           >
             {isNightMode ? '☀️' : '🌙'}
@@ -687,20 +725,12 @@ export default function App() {
         </div>
       </header>
 
-      {/* --- 상단 알림 배너 --- */}
+      {/* --- [6번 개선] 3.5초 뒤 자동으로 사라지는 심플 토스트 알림 --- */}
       {bannerMessage && !isAnyModalOpen && (
-        <div className="absolute top-16 left-3 right-3 z-20 flex justify-center pointer-events-none">
-          <div className="bg-amber-400/95 backdrop-blur-sm text-stone-950 px-3.5 py-1.5 rounded-full font-extrabold text-[11px] md:text-xs shadow-lg flex items-center justify-between gap-2 w-full max-w-md pointer-events-auto">
-            <div className="flex items-center gap-1.5 truncate">
-              <SparkleIcon className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">{bannerMessage}</span>
-            </div>
-            <button
-              onClick={() => setBannerMessage(null)}
-              className="text-[10px] underline opacity-75 hover:opacity-100 shrink-0 pl-1"
-            >
-              닫기
-            </button>
+        <div className="absolute top-15 left-4 right-4 z-20 flex justify-center pointer-events-none">
+          <div className="bg-stone-900/85 backdrop-blur-md text-amber-200 px-4 py-1.5 rounded-full font-bold text-[11px] shadow-xl border border-amber-400/30 flex items-center gap-1.5 max-w-sm truncate">
+            <SparkleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="truncate">{bannerMessage}</span>
           </div>
         </div>
       )}
@@ -724,21 +754,22 @@ export default function App() {
           color="#fef08a"
         />
 
-        {/* 밤하늘 협동 유성우 이펙트 */}
         <MeteorShowerEffect active={meteorActive} />
 
         <TraditionalClouds isNightMode={isNightMode} />
         <UnifiedHillTerrain
           onGroundClick={(pt) => {
+            // [8번 개선] 바닥 터치 시 현재 카메라 시점 각도를 흔들지 않고 자연스럽게 이동
             if (myAction === 'sit') setMyAction('idle');
             setFollowingId(null);
-            setFocusedTarget(null);
-            setCameraMode('follow');
+            if (cameraMode === 'sky') {
+              setFocusedTarget(null);
+              setCameraMode('follow');
+            }
             setClickTarget(pt);
           }}
         />
 
-        {/* 바닥 클릭 이동 물결 마커 & 협동 복구슬 제단 */}
         <ClickTargetMarker target={clickTarget} />
         <WishAltarAndOrbs
           orbs={orbsState}
@@ -799,8 +830,10 @@ export default function App() {
           />
         ))}
 
+        {/* [4번 개선] 조이스틱 드래그 중에는 카메라 회전(enabled) 자동 잠금! */}
         <OrbitControls
           ref={controlsRef}
+          enabled={!isJoystickDragging}
           target={[0, 5.0, 0]}
           minPolarAngle={0.02}
           maxPolarAngle={
@@ -812,10 +845,11 @@ export default function App() {
         />
       </Canvas>
 
-      {/* --- Level 2 (HUD): 하단 조이스틱 & 4대 몸짓 액션 휠 & 소원지 버튼 --- */}
+      {/* --- Level 2 (HUD): 하단 조이스틱 & 몸짓 & 소원지 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
+            onDragChange={setIsJoystickDragging}
             onMove={(vec) => {
               joystickVec.current = vec;
               if (Math.hypot(vec.x, vec.y) > 0.1) {
@@ -828,9 +862,8 @@ export default function App() {
         </div>
 
         <div className="pointer-events-auto flex flex-col items-end gap-2">
-          {/* [4번] 펼쳐지는 4대 비언어 바디랭귀지 버튼 메뉴 */}
           {isActionMenuOpen && (
-            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border-2 border-amber-900/20 flex items-center gap-1 animate-bounce">
+            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border border-amber-900/20 flex items-center gap-1">
               <button
                 onClick={() => handleTriggerAction('jump', '🙌 만세 점프!')}
                 className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
@@ -870,7 +903,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
-              className="h-12 px-3.5 rounded-2xl bg-white/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1.5 transition transform active:scale-95"
+              className="h-11 px-3.5 rounded-full bg-[#fcf9f2]/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1.5 transition transform active:scale-95"
             >
               <Smile className="w-4 h-4 text-amber-500 shrink-0" />
               <span>몸짓</span>
@@ -878,7 +911,7 @@ export default function App() {
 
             <button
               onClick={() => setIsWriteModalOpen(true)}
-              className={`h-12 px-4 md:px-5 rounded-2xl font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border-2 ${
+              className={`h-11 px-4 md:px-5 rounded-full font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border ${
                 isNearTree
                   ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white ring-4 ring-amber-300/60 animate-pulse'
                   : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'

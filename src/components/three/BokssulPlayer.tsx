@@ -41,7 +41,7 @@ export const BokssulPlayerAndCamera = ({
   stopFollowing: () => void;
   remotePlayers: Record<string, RemotePlayer>;
   orbsRef: React.MutableRefObject<RollingOrb[]>;
-  onOrbPushed: (orbs: RollingOrb[]) => void;
+  onOrbPushed: (orbs: RollingOrb[], justCollected: boolean) => void;
   onHighFive: (friendName: string) => void;
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   cameraMode: CameraMode;
@@ -63,18 +63,18 @@ export const BokssulPlayerAndCamera = ({
   const bodyRef = useRef<THREE.Group>(null);
   const initialPos = useRef({
     x: (Math.random() - 0.5) * 4,
-    z: 7.5 + Math.random() * 2,
+    z: 8.2 + Math.random() * 2,
   });
   const posRef = useRef({ x: initialPos.current.x, z: initialPos.current.z });
   const rotRef = useRef(Math.PI);
   const hopTimer = useRef(0);
   const nearRef = useRef(false);
   const lastBroadcastTime = useRef(0);
+  const lastOrbSyncTime = useRef(0);
   const wasMovingRef = useRef(false);
   const lastHighFiveTime = useRef(0);
   const [highFiveSpark, setHighFiveSpark] = useState(false);
 
-  // 카메라 시점 전환 시 처음 1.2초 동안만 부드럽게 잡아주고 이후 자유 회전 허용
   const cameraTransitionTimer = useRef(0);
   useEffect(() => {
     cameraTransitionTimer.current = 1.25;
@@ -82,6 +82,7 @@ export const BokssulPlayerAndCamera = ({
 
   useFrame((state, delta) => {
     if (!groupRef.current || !bodyRef.current) return;
+    const dt = Math.min(delta, 0.05);
 
     const speed = 5.8;
     let inputX = joystickVec.current.x;
@@ -94,7 +95,6 @@ export const BokssulPlayerAndCamera = ({
 
     const hasManualInput = Math.hypot(inputX, inputZ) > 0.05;
 
-    // 수동 조작 시 자동 이동/따라가기 해제
     if (hasManualInput) {
       if (clickTarget) clearClickTarget();
       if (followingPlayer) stopFollowing();
@@ -121,7 +121,6 @@ export const BokssulPlayerAndCamera = ({
         .addScaledVector(camForward, -normZ)
         .normalize();
     } else if (followingPlayer) {
-      // [6번] 기차놀이: 선택한 친구 복쓸덩이 뒤를 졸졸 따라가기
       const dx = followingPlayer.x - posRef.current.x;
       const dz = followingPlayer.z - posRef.current.z;
       const dist = Math.hypot(dx, dz);
@@ -130,7 +129,6 @@ export const BokssulPlayerAndCamera = ({
         moveVec.set(dx / dist, 0, dz / dist);
       }
     } else if (clickTarget) {
-      // [1번] 바닥 터치 지점으로 자동 이동
       const dx = clickTarget.x - posRef.current.x;
       const dz = clickTarget.z - posRef.current.z;
       const dist = Math.hypot(dx, dz);
@@ -143,13 +141,13 @@ export const BokssulPlayerAndCamera = ({
     }
 
     if (isMoving) {
-      posRef.current.x += moveVec.x * speed * moveLen * delta;
-      posRef.current.z += moveVec.z * speed * moveLen * delta;
+      posRef.current.x += moveVec.x * speed * moveLen * dt;
+      posRef.current.z += moveVec.z * speed * moveLen * dt;
 
       const distFromOrigin = Math.hypot(posRef.current.x, posRef.current.z);
-      if (distFromOrigin > 26) {
-        posRef.current.x = (posRef.current.x / distFromOrigin) * 26;
-        posRef.current.z = (posRef.current.z / distFromOrigin) * 26;
+      if (distFromOrigin > 25) {
+        posRef.current.x = (posRef.current.x / distFromOrigin) * 25;
+        posRef.current.z = (posRef.current.z / distFromOrigin) * 25;
       }
       if (distFromOrigin < 2.2) {
         posRef.current.x = (posRef.current.x / distFromOrigin) * 2.2;
@@ -160,14 +158,13 @@ export const BokssulPlayerAndCamera = ({
       rotRef.current = THREE.MathUtils.lerp(
         rotRef.current,
         targetRot,
-        12 * delta
+        12 * dt
       );
-      hopTimer.current += delta * 15;
+      hopTimer.current += dt * 15;
     } else {
       hopTimer.current = 0;
     }
 
-    // [5번] 다른 복쓸덩이와 가까이 만나면 '박치기 하이파이브' 바운스!
     const now = state.clock.elapsedTime;
     if (now - lastHighFiveTime.current > 4.0) {
       for (const rp of Object.values(remotePlayers)) {
@@ -182,39 +179,131 @@ export const BokssulPlayerAndCamera = ({
       }
     }
 
-    // [8+10번] 황금 복구슬 몸으로 밀기 & 제단(x:0, z:6.2) 골인 판정
-    let orbChanged = false;
-    const updatedOrbs = orbsRef.current.map((orb) => {
-      if (orb.collected) return orb;
+    // --- [탄성 공 물리 엔진] 부딪히면 통! 튕겨서 데구르르 굴러가고 바구니로 쏙 빠짐 ---
+    const altarX = 0;
+    const altarZ = 6.0;
+    let anyOrbActive = false;
+    let newlyCollected = false;
+
+    const orbs = orbsRef.current;
+    for (let i = 0; i < orbs.length; i++) {
+      const orb = orbs[i];
+      if (orb.collected) continue;
+
+      // 1. 내 복쓸덩이가 공을 쳤을 때 강한 탄성 임펄스(속도) 부여
       const dx = orb.x - posRef.current.x;
       const dz = orb.z - posRef.current.z;
       const dist = Math.hypot(dx, dz);
 
-      if (dist < 1.15 && dist > 0.001) {
-        orbChanged = true;
-        const pushSpeed = 8.5 * delta;
-        const nx = orb.x + (dx / dist) * pushSpeed;
-        const nz = orb.z + (dz / dist) * pushSpeed;
-        const distToAltar = Math.hypot(nx - 0, nz - 6.2);
-        return {
-          ...orb,
-          x: Number(nx.toFixed(2)),
-          z: Number(nz.toFixed(2)),
-          collected: distToAltar < 1.75,
-        };
-      }
-      return orb;
-    });
+      if (dist < 1.08 && dist > 0.001) {
+        const nx = dx / dist;
+        const nz = dz / dist;
+        const overlap = 1.08 - dist;
+        orb.x += nx * overlap;
+        orb.z += nz * overlap;
 
-    if (orbChanged) {
-      orbsRef.current = updatedOrbs;
-      onOrbPushed(updatedOrbs);
+        const kickPower = isMoving ? 10.5 : 5.5;
+        orb.vx = nx * kickPower + moveVec.x * 2.5;
+        orb.vz = nz * kickPower + moveVec.z * 2.5;
+        anyOrbActive = true;
+      }
+
+      // 2. 다른 공과 부딪혔을 때 당구공처럼 서로 튕김
+      for (let j = i + 1; j < orbs.length; j++) {
+        const other = orbs[j];
+        if (other.collected) continue;
+        const odx = other.x - orb.x;
+        const odz = other.z - orb.z;
+        const odist = Math.hypot(odx, odz);
+        if (odist < 1.05 && odist > 0.001) {
+          const onx = odx / odist;
+          const onz = odz / odist;
+          const push = (1.05 - odist) * 0.5;
+          orb.x -= onx * push;
+          orb.z -= onz * push;
+          other.x += onx * push;
+          other.z += onz * push;
+
+          const avgSpeed = Math.max(
+            4.5,
+            Math.hypot(orb.vx, orb.vz, other.vx, other.vz) * 0.7
+          );
+          orb.vx = -onx * avgSpeed;
+          orb.vz = -onz * avgSpeed;
+          other.vx = onx * avgSpeed;
+          other.vz = onz * avgSpeed;
+          anyOrbActive = true;
+        }
+      }
+
+      // 3. 속도 기반 이동 및 잔디 마찰력 감속
+      const currentSpeed = Math.hypot(orb.vx, orb.vz);
+      if (currentSpeed > 0.08) {
+        anyOrbActive = true;
+        orb.x += orb.vx * dt;
+        orb.z += orb.vz * dt;
+
+        // 마찰력 (서서히 멈춤)
+        const friction = Math.pow(0.18, dt);
+        orb.vx *= friction;
+        orb.vz *= friction;
+
+        // 당산나무 기둥이나 맵 가장자리에 닿으면 통! 하고 튕겨 나옴
+        const distOrigin = Math.hypot(orb.x, orb.z);
+        if (distOrigin > 23.5) {
+          const bx = orb.x / distOrigin;
+          const bz = orb.z / distOrigin;
+          orb.x = bx * 23.4;
+          orb.z = bz * 23.4;
+          orb.vx *= -0.75;
+          orb.vz *= -0.75;
+        } else if (distOrigin < 2.2) {
+          const bx = orb.x / (distOrigin || 1);
+          const bz = orb.z / (distOrigin || 1);
+          orb.x = bx * 2.25;
+          orb.z = bz * 2.25;
+          orb.vx = bx * 6.0;
+          orb.vz = bz * 6.0;
+        }
+      } else {
+        orb.vx = 0;
+        orb.vz = 0;
+      }
+
+      // 4. 복바구니(x:0, z:6.0) 주변에 오면 바구니 속으로 빨려 들어가며 골인!
+      const distToBasket = Math.hypot(orb.x - altarX, orb.z - altarZ);
+      if (distToBasket < 2.3 && distToBasket > 1.35) {
+        // 바구니 테두리 자석 인력
+        orb.vx += ((altarX - orb.x) / distToBasket) * 12 * dt;
+        orb.vz += ((altarZ - orb.z) / distToBasket) * 12 * dt;
+        anyOrbActive = true;
+      } else if (distToBasket <= 1.35) {
+        orb.collected = true;
+        orb.vx = 0;
+        orb.vz = 0;
+        newlyCollected = true;
+        anyOrbActive = true;
+      }
+    }
+
+    if (
+      newlyCollected ||
+      (anyOrbActive && now - lastOrbSyncTime.current > 0.08)
+    ) {
+      lastOrbSyncTime.current = now;
+      const cloned = orbs.map((o) => ({
+        ...o,
+        x: Number(o.x.toFixed(2)),
+        z: Number(o.z.toFixed(2)),
+        vx: Number(o.vx.toFixed(2)),
+        vz: Number(o.vz.toFixed(2)),
+      }));
+      onOrbPushed(cloned, newlyCollected);
     }
 
     const groundY = getTerrainHeight(posRef.current.x, posRef.current.z);
     const hopOffset = isMoving ? Math.abs(Math.sin(hopTimer.current)) * 0.34 : 0;
 
-    // [2번 & 4번] 말랑 텐션(Squash & Stretch) 및 4대 바디랭귀지 모션
     let actionY = 0;
     bodyRef.current.rotation.set(0, 0, 0);
     bodyRef.current.scale.set(1, 1, 1);
@@ -256,12 +345,11 @@ export const BokssulPlayerAndCamera = ({
     }
     wasMovingRef.current = isMoving;
 
-    // --- 카메라 제어 (하늘 시점 자유 회전 지원) ---
     if (controlsRef.current) {
       if (focusedTarget && cameraTransitionTimer.current > 0) {
-        cameraTransitionTimer.current -= delta;
+        cameraTransitionTimer.current -= dt;
         const focusVec = new THREE.Vector3(...focusedTarget);
-        controlsRef.current.target.lerp(focusVec, 6 * delta);
+        controlsRef.current.target.lerp(focusVec, 6 * dt);
       } else if (cameraMode === 'follow' && !focusedTarget) {
         const playerTarget = new THREE.Vector3(
           posRef.current.x,
@@ -269,20 +357,19 @@ export const BokssulPlayerAndCamera = ({
           posRef.current.z
         );
         const prevTarget = controlsRef.current.target.clone();
-        controlsRef.current.target.lerp(playerTarget, 8 * delta);
+        controlsRef.current.target.lerp(playerTarget, 8 * dt);
         const diff = controlsRef.current.target.clone().sub(prevTarget);
         state.camera.position.add(diff);
       } else if (cameraMode === 'tree' && cameraTransitionTimer.current > 0) {
-        cameraTransitionTimer.current -= delta;
+        cameraTransitionTimer.current -= dt;
         const treeTarget = new THREE.Vector3(0, 6.2, 0);
-        controlsRef.current.target.lerp(treeTarget, 5 * delta);
+        controlsRef.current.target.lerp(treeTarget, 5 * dt);
       } else if (cameraMode === 'sky' && cameraTransitionTimer.current > 0) {
-        // 하늘 시점으로 전환될 때 처음 1.2초 동안만 천문대 각도로 올려다보고 이후에는 자유 회전!
-        cameraTransitionTimer.current -= delta;
+        cameraTransitionTimer.current -= dt;
         const skyTarget = new THREE.Vector3(0, 17.5, 0);
         const skyCamPos = new THREE.Vector3(0, 4.5, 14);
-        controlsRef.current.target.lerp(skyTarget, 4 * delta);
-        state.camera.position.lerp(skyCamPos, 3.5 * delta);
+        controlsRef.current.target.lerp(skyTarget, 4 * dt);
+        state.camera.position.lerp(skyCamPos, 3.5 * dt);
       }
     }
 
