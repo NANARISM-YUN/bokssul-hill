@@ -1,16 +1,18 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Sparkles } from '@react-three/drei';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { MisfortuneSpirit } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 
 const SingleSpiritMesh = ({
   spirit,
+  playerPosRef,
   hideLabels,
   onSweepSpirit,
 }: {
   spirit: MisfortuneSpirit;
+  playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
   hideLabels: boolean;
   onSweepSpirit: (id: string) => void;
 }) => {
@@ -18,10 +20,26 @@ const SingleSpiritMesh = ({
   const coreRef = useRef<THREE.Group>(null);
   const ringRef = useRef<THREE.Mesh>(null);
   const seed = useRef(Math.random() * 10);
+  const [isNearPlayer, setIsNearPlayer] = useState(false);
+  const nearCheckTimer = useRef(0);
 
   useFrame((state, delta) => {
     if (!groupRef.current || !coreRef.current) return;
     const t = state.clock.elapsedTime + seed.current;
+
+    // 0.25초마다 플레이어와의 거리를 체크하여 가까울 때만 체력바 UI 표시 (렌더링 부하 절감 & 화면 정리)
+    nearCheckTimer.current += delta;
+    if (nearCheckTimer.current > 0.25) {
+      nearCheckTimer.current = 0;
+      const dist = Math.hypot(
+        spirit.x - playerPosRef.current.x,
+        spirit.z - playerPosRef.current.z
+      );
+      const shouldShow = Boolean(spirit.isBoss) || dist < 6.8;
+      if (shouldShow !== isNearPlayer) {
+        setIsNearPlayer(shouldShow);
+      }
+    }
 
     const wobbleRadius = spirit.isBoss ? 0.55 : 0.25;
     const wobbleX = Math.sin(t * (spirit.isBoss ? 1.4 : 2.2)) * wobbleRadius;
@@ -34,7 +52,7 @@ const SingleSpiritMesh = ({
     groupRef.current.position.lerp(
       new THREE.Vector3(
         curX,
-        groundY + floatHeight + Math.sin(t * 3.5) * 0.14,
+        groundY + floatHeight + Math.sin(t * 3.5) * 0.12,
         curZ
       ),
       10 * delta
@@ -53,6 +71,8 @@ const SingleSpiritMesh = ({
     }
   });
 
+  const hpPercent = Math.max(0, Math.min(100, (spirit.hp / spirit.maxHp) * 100));
+
   return (
     <group
       ref={groupRef}
@@ -69,8 +89,7 @@ const SingleSpiritMesh = ({
       onPointerOut={() => (document.body.style.cursor = 'auto')}
     >
       <group ref={coreRef}>
-        {/* 먹구름 몸통 (보스는 붉은 기운이 감도는 칠흑색) */}
-        <mesh castShadow>
+        <mesh>
           <dodecahedronGeometry args={[0.45, 1]} />
           <meshStandardMaterial
             color={spirit.isBoss ? '#090514' : '#1e1b4b'}
@@ -80,32 +99,23 @@ const SingleSpiritMesh = ({
           />
         </mesh>
         <mesh position={[-0.24, 0.1, 0.12]}>
-          <dodecahedronGeometry args={[0.3, 0]} />
-          <meshToonMaterial color={spirit.isBoss ? '#3b0764' : '#311042'} />
-        </mesh>
-        <mesh position={[0.24, -0.08, -0.1]}>
           <dodecahedronGeometry args={[0.28, 0]} />
           <meshToonMaterial color={spirit.isBoss ? '#3b0764' : '#311042'} />
         </mesh>
+        <mesh position={[0.24, -0.08, -0.1]}>
+          <dodecahedronGeometry args={[0.26, 0]} />
+          <meshToonMaterial color={spirit.isBoss ? '#3b0764' : '#311042'} />
+        </mesh>
 
-        {/* 보스 전용: 머리 위 번개 뿔 2개와 바닥 다크 오라 링 */}
         {spirit.isBoss && (
           <>
             <mesh position={[-0.22, 0.45, 0]} rotation={[0, 0, 0.4]}>
               <coneGeometry args={[0.1, 0.35, 6]} />
-              <meshStandardMaterial
-                color="#ef4444"
-                emissive="#dc2626"
-                emissiveIntensity={1.5}
-              />
+              <meshBasicMaterial color="#ef4444" />
             </mesh>
             <mesh position={[0.22, 0.45, 0]} rotation={[0, 0, -0.4]}>
               <coneGeometry args={[0.1, 0.35, 6]} />
-              <meshStandardMaterial
-                color="#ef4444"
-                emissive="#dc2626"
-                emissiveIntensity={1.5}
-              />
+              <meshBasicMaterial color="#ef4444" />
             </mesh>
             <mesh
               ref={ringRef}
@@ -123,7 +133,6 @@ const SingleSpiritMesh = ({
           </>
         )}
 
-        {/* 눈동자 (보스는 강렬한 붉은 안광) */}
         <mesh position={[-0.14, 0.08, 0.38]}>
           <sphereGeometry args={[0.065, 8, 8]} />
           <meshBasicMaterial color={spirit.isBoss ? '#ff1744' : '#facc15'} />
@@ -134,33 +143,26 @@ const SingleSpiritMesh = ({
         </mesh>
       </group>
 
-      <Sparkles
-        count={spirit.isBoss ? 28 : 10}
-        scale={spirit.isBoss ? 2.6 : 1.4}
-        size={spirit.isBoss ? 5 : 3.5}
-        color={spirit.isBoss ? '#ef4444' : '#a855f7'}
-      />
-
-      {!hideLabels && (
+      {/* 가까이 다가갔을 때만 표시되는 슬림 프로그레스 체력바 */}
+      {!hideLabels && isNearPlayer && (
         <Html
-          position={[0, spirit.isBoss ? 1.45 : 0.85, 0]}
+          position={[0, spirit.isBoss ? 1.45 : 0.82, 0]}
           center
           distanceFactor={15}
           zIndexRange={[10, 0]}
         >
-          <div
-            className={`px-2.5 py-0.5 rounded-full text-[9px] font-extrabold whitespace-nowrap shadow-md pointer-events-none flex items-center gap-1 border ${
-              spirit.isBoss
-                ? 'bg-red-950/95 border-red-400 text-amber-200 animate-bounce'
-                : 'bg-purple-950/90 border-purple-400/60 text-purple-200'
-            }`}
-          >
-            <span>{spirit.isBoss ? '⚡ 거대 대액운' : '👾 액운'}</span>
-            <span className="text-amber-300 font-black">
-              {spirit.isBoss
-                ? `HP ${spirit.hp}/${spirit.maxHp} (🫘팥 특효!)`
-                : '❤️'.repeat(spirit.hp)}
-            </span>
+          <div className="px-2 py-1 bg-stone-950/90 border border-purple-400/50 rounded-xl shadow-md pointer-events-none flex flex-col items-center gap-0.5 min-w-[68px]">
+            <div className="text-[9px] font-extrabold text-amber-200 whitespace-nowrap">
+              {spirit.isBoss ? '⚡ 대액운' : '👾 액운'} {spirit.hp}/{spirit.maxHp}
+            </div>
+            <div className="w-14 h-1.5 bg-stone-800 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-200 ${
+                  spirit.isBoss ? 'bg-red-500' : 'bg-purple-400'
+                }`}
+                style={{ width: `${hpPercent}%` }}
+              />
+            </div>
           </div>
         </Html>
       )}
@@ -170,10 +172,12 @@ const SingleSpiritMesh = ({
 
 export const MisfortuneSystem = ({
   spirits,
+  playerPosRef,
   hideLabels,
   onSweepSpirit,
 }: {
   spirits: MisfortuneSpirit[];
+  playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
   hideLabels: boolean;
   onSweepSpirit: (id: string) => void;
 }) => {
@@ -183,6 +187,7 @@ export const MisfortuneSystem = ({
         <SingleSpiritMesh
           key={sp.id}
           spirit={sp}
+          playerPosRef={playerPosRef}
           hideLabels={hideLabels}
           onSweepSpirit={onSweepSpirit}
         />

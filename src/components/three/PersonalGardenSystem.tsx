@@ -1,15 +1,34 @@
 import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Sparkles } from '@react-three/drei';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import type { BeanPlot, GardenItemId } from '../../types/wish';
+import type { BeanPlot, GardenItemId, GardenDecorMap } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 
-// GPU 부하를 유발하던 pointLight를 제거하고 경량 발광 머티리얼로 최적화한 내 동산 조경물
+const SelectionHighlightRing = () => {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((state) => {
+    if (!ref.current) return;
+    ref.current.rotation.z = state.clock.elapsedTime * 2.5;
+  });
+  return (
+    <mesh ref={ref} position={[0, 0.15, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <ringGeometry args={[1.25, 1.5, 24]} />
+      <meshBasicMaterial color="#facc15" side={THREE.DoubleSide} />
+    </mesh>
+  );
+};
+
 const CustomGardenDecorObjects = ({
-  placedDecor,
+  decorLayout,
+  isEditMode,
+  selectedDecorId,
+  onSelectDecor,
 }: {
-  placedDecor: GardenItemId[];
+  decorLayout: GardenDecorMap;
+  isEditMode: boolean;
+  selectedDecorId: GardenItemId | null;
+  onSelectDecor: (id: GardenItemId) => void;
 }) => {
   const pagodaOrbRef = useRef<THREE.Mesh>(null);
   const fireRef = useRef<THREE.Mesh>(null);
@@ -26,11 +45,43 @@ const CustomGardenDecorObjects = ({
     }
   });
 
+  const renderWrapper = (
+    id: GardenItemId,
+    children: React.ReactNode
+  ) => {
+    const tf = decorLayout[id];
+    if (!tf) return null;
+    const isSelected = isEditMode && selectedDecorId === id;
+
+    return (
+      <group
+        key={id}
+        position={[tf.x, getTerrainHeight(tf.x, tf.z), tf.z]}
+        rotation={[0, tf.rot, 0]}
+        onClick={(e) => {
+          if (!isEditMode) return;
+          e.stopPropagation();
+          onSelectDecor(id);
+        }}
+        onPointerOver={() => {
+          if (isEditMode) document.body.style.cursor = 'pointer';
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = 'auto';
+        }}
+      >
+        {isSelected && <SelectionHighlightRing />}
+        {children}
+      </group>
+    );
+  };
+
   return (
     <group>
-      {/* 1. 🔥 따뜻한 모닥불 화로 (마당 정중앙 배치) */}
-      {placedDecor.includes('campfire') && (
-        <group position={[0, getTerrainHeight(0, 0.5), 0.5]}>
+      {/* 1. 🔥 따뜻한 모닥불 화로 */}
+      {renderWrapper(
+        'campfire',
+        <>
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
             const a = (i * Math.PI) / 4;
             return (
@@ -59,18 +110,19 @@ const CustomGardenDecorObjects = ({
               emissiveIntensity={2.2}
             />
           </mesh>
-        </group>
+        </>
       )}
 
       {/* 2. 🌸 천년 겹벚꽃 나무 */}
-      {placedDecor.includes('cherry_tree') && (
-        <group position={[-4.8, getTerrainHeight(-4.8, -1.5), -1.5]}>
+      {renderWrapper(
+        'cherry_tree',
+        <>
           <mesh position={[0, 1.3, 0]} castShadow>
             <cylinderGeometry args={[0.35, 0.55, 2.6, 10]} />
             <meshToonMaterial color="#4e342e" />
           </mesh>
           <mesh position={[0, 2.9, 0]} castShadow>
-            <sphereGeometry args={[1.8, 16, 16]} />
+            <sphereGeometry args={[1.8, 14, 14]} />
             <meshToonMaterial color="#f48fb1" />
           </mesh>
           <mesh position={[-1.1, 2.5, 0.6]}>
@@ -81,20 +133,13 @@ const CustomGardenDecorObjects = ({
             <sphereGeometry args={[1.2, 12, 12]} />
             <meshToonMaterial color="#f06292" />
           </mesh>
-          <Sparkles
-            count={18}
-            scale={[4, 3, 4]}
-            position={[0, 2.2, 0]}
-            size={4}
-            speed={0.5}
-            color="#fce4ec"
-          />
-        </group>
+        </>
       )}
 
       {/* 3. 🪨 오층 황금 소원석탑 */}
-      {placedDecor.includes('stone_pagoda') && (
-        <group position={[4.8, getTerrainHeight(4.8, -1.5), -1.5]}>
+      {renderWrapper(
+        'stone_pagoda',
+        <>
           {[0, 1, 2, 3, 4].map((tier) => {
             const w = 1.3 - tier * 0.2;
             const y = 0.25 + tier * 0.45;
@@ -119,15 +164,13 @@ const CustomGardenDecorObjects = ({
               emissiveIntensity={2.2}
             />
           </mesh>
-        </group>
+        </>
       )}
 
       {/* 4. 🪵 풍류 대청 평상 */}
-      {placedDecor.includes('wood_bench') && (
-        <group
-          position={[-4.5, getTerrainHeight(-4.5, 7.2), 7.2]}
-          rotation={[0, 0.4, 0]}
-        >
+      {renderWrapper(
+        'wood_bench',
+        <>
           <mesh position={[0, 0.32, 0]} receiveShadow>
             <boxGeometry args={[2.5, 0.16, 1.8]} />
             <meshToonMaterial color="#8d6e63" />
@@ -140,15 +183,13 @@ const CustomGardenDecorObjects = ({
             <sphereGeometry args={[0.18, 10, 10]} />
             <meshToonMaterial color="#dc2626" />
           </mesh>
-        </group>
+        </>
       )}
 
       {/* 5. 🏮 청사초롱 쌍등 */}
-      {placedDecor.includes('lantern_pair') && (
-        <group
-          position={[4.5, getTerrainHeight(4.5, 7.2), 7.2]}
-          rotation={[0, -0.4, 0]}
-        >
+      {renderWrapper(
+        'lantern_pair',
+        <>
           {[-0.9, 0.9].map((lx, i) => (
             <group key={i} position={[lx, 0, 0]}>
               <mesh position={[0, 1.1, 0]}>
@@ -177,12 +218,13 @@ const CustomGardenDecorObjects = ({
               </mesh>
             </group>
           ))}
-        </group>
+        </>
       )}
 
       {/* 6. 🎐 액막이 황금 싸리문 */}
-      {placedDecor.includes('ssari_gate') && (
-        <group position={[0, getTerrainHeight(0, 11.8), 11.8]}>
+      {renderWrapper(
+        'ssari_gate',
+        <>
           <mesh position={[-1.6, 1.25, 0]}>
             <cylinderGeometry args={[0.14, 0.18, 2.5, 8]} />
             <meshToonMaterial color="#5d4037" />
@@ -205,7 +247,7 @@ const CustomGardenDecorObjects = ({
               <meshToonMaterial color="#dc2626" />
             </mesh>
           ))}
-        </group>
+        </>
       )}
     </group>
   );
@@ -213,13 +255,19 @@ const CustomGardenDecorObjects = ({
 
 export const PersonalGardenSystem = ({
   plots,
-  placedDecor,
+  decorLayout,
+  isEditMode,
+  selectedDecorId,
+  onSelectDecor,
   hideLabels,
   ownerNickname,
   onInteractPlot,
 }: {
   plots: BeanPlot[];
-  placedDecor: GardenItemId[];
+  decorLayout: GardenDecorMap;
+  isEditMode: boolean;
+  selectedDecorId: GardenItemId | null;
+  onSelectDecor: (id: GardenItemId) => void;
   hideLabels: boolean;
   ownerNickname: string;
   onInteractPlot: (plot: BeanPlot) => void;
@@ -229,9 +277,13 @@ export const PersonalGardenSystem = ({
 
   return (
     <group>
-      <CustomGardenDecorObjects placedDecor={placedDecor} />
+      <CustomGardenDecorObjects
+        decorLayout={decorLayout}
+        isEditMode={isEditMode}
+        selectedDecorId={selectedDecorId}
+        onSelectDecor={onSelectDecor}
+      />
 
-      {/* 내 동산 문패 */}
       <group position={[-3.5, signY, 0.2]} rotation={[0, 0.25, 0]}>
         <mesh position={[0, 0.55, 0]}>
           <cylinderGeometry args={[0.08, 0.1, 1.2, 8]} />
@@ -249,13 +301,12 @@ export const PersonalGardenSystem = ({
             zIndexRange={[10, 0]}
           >
             <div className="px-2.5 py-0.5 bg-amber-950/90 border border-amber-400/60 rounded-full text-[10px] font-extrabold text-amber-100 whitespace-nowrap shadow pointer-events-none">
-              🏡 {ownerNickname}의 아늑한 동산
+              🏡 {ownerNickname}의 동산
             </div>
           </Html>
         )}
       </group>
 
-      {/* 액막이 붉은 팥항아리 */}
       <group position={[3.5, jarY, 0.2]}>
         <mesh position={[0, 0.45, 0]}>
           <sphereGeometry args={[0.55, 14, 14]} />
@@ -271,7 +322,6 @@ export const PersonalGardenSystem = ({
         </mesh>
       </group>
 
-      {/* 붉은 팥 텃밭 3칸 */}
       {plots.map((plot) => {
         const y = getTerrainHeight(plot.x, plot.z);
         return (
@@ -279,6 +329,7 @@ export const PersonalGardenSystem = ({
             key={plot.id}
             position={[plot.x, y, plot.z]}
             onClick={(e) => {
+              if (isEditMode) return;
               e.stopPropagation();
               onInteractPlot(plot);
             }}
@@ -337,7 +388,7 @@ export const PersonalGardenSystem = ({
               </group>
             )}
 
-            {!hideLabels && (
+            {!hideLabels && !isEditMode && (
               <Html
                 position={[0, 1.15, 0]}
                 center
@@ -357,9 +408,9 @@ export const PersonalGardenSystem = ({
                       : 'bg-lime-900/85 text-lime-100 border-lime-400/40'
                   }`}
                 >
-                  {plot.stage === 'empty' && '🌱 팥 심기 (🔮공덕 5)'}
-                  {plot.stage === 'sprout' && '🌿 새싹 (🧹쓸면 즉시 완성)'}
-                  {plot.stage === 'growing' && '🌿 영그는 중 (🧹쓸면 즉시 완성)'}
+                  {plot.stage === 'empty' && '🌱 팥 심기 (🔮10)'}
+                  {plot.stage === 'sprout' && '🌿 새싹 (🧹쓸면 시간단축)'}
+                  {plot.stage === 'growing' && '🌿 영그는 중 (🧹쓸면 시간단축)'}
                   {plot.stage === 'ready' && '🫘 붉은 팥 수확! (+2알)'}
                 </button>
               </Html>

@@ -43,7 +43,6 @@ export type FlowerType =
 
 export type ZoneMode = 'public' | 'my_garden';
 
-// Phase 4: 내 동산 커스텀 조경 아이템 6종 ID
 export type GardenItemId =
   | 'cherry_tree'
   | 'campfire'
@@ -51,6 +50,15 @@ export type GardenItemId =
   | 'wood_bench'
   | 'lantern_pair'
   | 'ssari_gate';
+
+// 내 동산 조경 오브제 자유 이동 & 회전 좌표 구조
+export interface DecorTransform {
+  x: number;
+  z: number;
+  rot: number;
+}
+
+export type GardenDecorMap = Partial<Record<GardenItemId, DecorTransform>>;
 
 export interface RemotePlayer {
   id: string;
@@ -86,7 +94,7 @@ export interface MisfortuneSpirit {
   hp: number;
   maxHp: number;
   scale: number;
-  isBoss?: boolean; // Phase 4: 거대 먹구름 대액운 여부
+  isBoss?: boolean;
 }
 
 export interface BeanPlot {

@@ -8,7 +8,7 @@ import type {
   PlayerAction,
   FlowerType,
   MisfortuneSpirit,
-  GardenItemId,
+  GardenDecorMap,
 } from '../types/wish';
 
 interface UseMultiplayerProps {
@@ -22,12 +22,12 @@ interface UseMultiplayerProps {
   orbsRef: React.MutableRefObject<RollingOrb[]>;
   spiritsRef: React.MutableRefObject<MisfortuneSpirit[]>;
   wishesRef: React.MutableRefObject<Wish[]>;
-  placedDecorRef: React.MutableRefObject<GardenItemId[]>;
+  decorLayoutRef: React.MutableRefObject<GardenDecorMap>;
   setSpirits: React.Dispatch<React.SetStateAction<MisfortuneSpirit[]>>;
   setCollectedCount: (count: number) => void;
   onMeteorTriggered: () => void;
   onRemoteAscension?: (nickname: string) => void;
-  onRemoteDecorSync?: (decor: GardenItemId[]) => void;
+  onRemoteDecorSync?: (layout: GardenDecorMap) => void;
   setWishes: React.Dispatch<React.SetStateAction<Wish[]>>;
   setBannerMessage: (msg: string | null) => void;
   setIsNightMode: (night: boolean) => void;
@@ -44,7 +44,7 @@ export const useMultiplayer = ({
   orbsRef,
   spiritsRef,
   wishesRef,
-  placedDecorRef,
+  decorLayoutRef,
   setSpirits,
   setCollectedCount,
   onMeteorTriggered,
@@ -136,7 +136,7 @@ export const useMultiplayer = ({
           orbs: orbsRef.current,
           spirits: spiritsRef.current,
           wishes: wishesRef.current,
-          placedDecor: placedDecorRef.current,
+          decorLayout: decorLayoutRef.current,
         },
       });
     });
@@ -160,8 +160,8 @@ export const useMultiplayer = ({
         }));
         setWishes(synced);
       }
-      if (payload.placedDecor && onRemoteDecorSync) {
-        onRemoteDecorSync(payload.placedDecor);
+      if (payload.decorLayout && onRemoteDecorSync) {
+        onRemoteDecorSync(payload.decorLayout);
       }
     });
 
@@ -223,8 +223,8 @@ export const useMultiplayer = ({
     });
 
     channel.on('broadcast', { event: 'garden-decor-sync' }, ({ payload }) => {
-      if (!payload || !payload.placedDecor || !onRemoteDecorSync) return;
-      onRemoteDecorSync(payload.placedDecor);
+      if (!payload || !payload.decorLayout || !onRemoteDecorSync) return;
+      onRemoteDecorSync(payload.decorLayout);
     });
 
     channel.on('broadcast', { event: 'wish-sync' }, ({ payload }) => {
@@ -272,7 +272,7 @@ export const useMultiplayer = ({
     orbsRef,
     spiritsRef,
     wishesRef,
-    placedDecorRef,
+    decorLayoutRef,
     setSpirits,
     setCollectedCount,
     onMeteorTriggered,
@@ -361,12 +361,12 @@ export const useMultiplayer = ({
     []
   );
 
-  const broadcastGardenDecor = useCallback((placedDecor: GardenItemId[]) => {
+  const broadcastGardenDecor = useCallback((decorLayout: GardenDecorMap) => {
     if (!channelRef.current) return;
     channelRef.current.send({
       type: 'broadcast',
       event: 'garden-decor-sync',
-      payload: { placedDecor },
+      payload: { decorLayout },
     });
   }, []);
 

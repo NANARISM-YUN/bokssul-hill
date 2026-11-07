@@ -4,11 +4,13 @@ import type {
   ZoneMode,
   BeanPlot,
   GardenItemId,
+  GardenDecorMap,
 } from '../types/wish';
 import {
   FLOWER_TYPES,
   KARMA_THRESHOLDS,
   O2O_REWARD_CODES,
+  GARDEN_CATALOG,
 } from '../utils/constants';
 
 export const getGrowthStage = (karma: number): 0 | 1 | 2 | 3 => {
@@ -27,7 +29,7 @@ const getTodayKey = () => {
 
 const INITIAL_BEAN_PLOTS: BeanPlot[] = [
   { id: 1, x: -3.2, z: 3.5, stage: 'empty', plantedAt: null },
-  { id: 2, x: 0.0, z: 4.0, stage: 'ready', plantedAt: Date.now() - 30000 },
+  { id: 2, x: 0.0, z: 4.0, stage: 'ready', plantedAt: Date.now() - 70000 },
   { id: 3, x: 3.2, z: 3.5, stage: 'empty', plantedAt: null },
 ];
 
@@ -52,7 +54,6 @@ export const useGameProgress = () => {
     return params.get('garden') ? 'my_garden' : 'public';
   });
 
-  // [1일 유지 보상화 시스템] 날짜가 바뀌면 오늘의 보상화 종류와 일일 개화 공덕이 새로 시작됨!
   const [flowerType, setFlowerType] = useState<FlowerType>(() => {
     const savedDate = localStorage.getItem('bokssul_daily_date');
     const savedFlower = localStorage.getItem('bokssul_flower') as FlowerType | null;
@@ -64,23 +65,23 @@ export const useGameProgress = () => {
     return picked;
   });
 
+  // 하루 시작 기본 공덕 10점 (노력을 통해 100점까지 모아야 만개)
   const [karma, setKarma] = useState<number>(() => {
     const savedDate = localStorage.getItem('bokssul_daily_date');
     if (savedDate !== todayKey) {
       localStorage.setItem('bokssul_daily_date', todayKey);
-      localStorage.setItem('bokssul_karma', '15'); // 매일 기본 시작 공덕 15점 부여 (15점만 더 모으면 오늘의 꽃 만개!)
-      return 15;
+      localStorage.setItem('bokssul_karma', '10');
+      return 10;
     }
     const saved = localStorage.getItem('bokssul_karma');
-    return saved ? parseInt(saved, 10) : 15;
+    return saved ? parseInt(saved, 10) : 10;
   });
 
   const [redBeans, setRedBeans] = useState<number>(() => {
     const saved = localStorage.getItem('bokssul_redbeans');
-    return saved ? parseInt(saved, 10) : 3;
+    return saved ? parseInt(saved, 10) : 2;
   });
 
-  // O2O 매장/굿즈 인증 배지 목록
   const [claimedCodes, setClaimedCodes] = useState<string[]>(() => {
     const saved = localStorage.getItem('bokssul_o2o_codes');
     if (saved) {
@@ -117,19 +118,20 @@ export const useGameProgress = () => {
     return [];
   });
 
-  const [placedDecor, setPlacedDecor] = useState<GardenItemId[]>(() => {
-    const saved = localStorage.getItem('bokssul_placed_decor');
+  // 조경물 배치 좌표 & 회전값 저장 맵
+  const [decorLayout, setDecorLayout] = useState<GardenDecorMap>(() => {
+    const saved = localStorage.getItem('bokssul_decor_layout');
     if (saved) {
       try {
         return JSON.parse(saved);
       } catch {
-        return [];
+        return {};
       }
     }
-    return [];
+    return {};
   });
 
-  // ⭐ [렉 해결 핵심] 자라고 있는 팥이 있을 때만 타이머를 예약하여 불필요한 1초 리렌더링을 100% 제거!
+  // 팥 성장 타이머 (30초 줄기 -> 60초 수확 가능)
   useEffect(() => {
     const growingPlots = beanPlots.filter(
       (p) => p.stage === 'sprout' || p.stage === 'growing'
@@ -144,8 +146,8 @@ export const useGameProgress = () => {
             return plot;
           }
           const elapsed = now - plot.plantedAt;
-          if (elapsed >= 18000) return { ...plot, stage: 'ready' as const };
-          if (elapsed >= 8000 && plot.stage === 'sprout') {
+          if (elapsed >= 60000) return { ...plot, stage: 'ready' as const };
+          if (elapsed >= 30000 && plot.stage === 'sprout') {
             return { ...plot, stage: 'growing' as const };
           }
           return plot;
@@ -153,7 +155,7 @@ export const useGameProgress = () => {
         localStorage.setItem('bokssul_bean_plots', JSON.stringify(next));
         return next;
       });
-    }, 3000);
+    }, 4000);
 
     return () => clearTimeout(timer);
   }, [beanPlots]);
@@ -174,7 +176,6 @@ export const useGameProgress = () => {
     });
   }, []);
 
-  // O2O 코드 등록 함수 (매장 방문 / 굿즈 QR 연동)
   const redeemO2OCode = useCallback(
     (rawCode: string): { ok: boolean; message: string } => {
       const code = rawCode.trim();
@@ -189,7 +190,7 @@ export const useGameProgress = () => {
       if (claimedCodes.includes(code)) {
         return {
           ok: false,
-          message: '이미 오늘 수령하신 오프라인 공덕 코드입니다!',
+          message: '이미 수령하신 오프라인 공덕 코드입니다!',
         };
       }
       const nextClaimed = [...claimedCodes, code];
@@ -199,13 +200,12 @@ export const useGameProgress = () => {
       addRedBeans(reward.beans);
       return {
         ok: true,
-        message: `${reward.title} 완료! (🔮공덕 +${reward.karma} · 🫘팥 +${reward.beans} 지급 & 오늘의 보상화 즉시 만개!)`,
+        message: `${reward.title} 완료! (🔮공덕 +${reward.karma} · 🫘팥 +${reward.beans} 지급!)`,
       };
     },
     [claimedCodes, addKarma, addRedBeans]
   );
 
-  // 오늘의 꽃 다시 뽑기 (원할 때 다른 꽃 운세도 볼 수 있는 리롤 기능)
   const rerollTodayFlower = useCallback(() => {
     const others = FLOWER_TYPES.filter((f) => f !== flowerType);
     const picked = others[Math.floor(Math.random() * others.length)];
@@ -225,13 +225,25 @@ export const useGameProgress = () => {
     });
   }, []);
 
+  // 싸리빗자루로 텃밭을 돌보면 성장 시간이 12초씩 단축됨
   const boostAllPlots = useCallback(() => {
     setBeanPlots((prev) => {
-      const next = prev.map((p) =>
-        p.stage === 'sprout' || p.stage === 'growing'
-          ? { ...p, stage: 'ready' as const }
-          : p
-      );
+      const now = Date.now();
+      const next = prev.map((p) => {
+        if (!p.plantedAt || p.stage === 'empty' || p.stage === 'ready') return p;
+        const boostedTime = p.plantedAt - 12000;
+        const elapsed = now - boostedTime;
+        return {
+          ...p,
+          plantedAt: boostedTime,
+          stage:
+            elapsed >= 60000
+              ? ('ready' as const)
+              : elapsed >= 30000
+              ? ('growing' as const)
+              : ('sprout' as const),
+        };
+      });
       localStorage.setItem('bokssul_bean_plots', JSON.stringify(next));
       return next;
     });
@@ -248,26 +260,75 @@ export const useGameProgress = () => {
   }, []);
 
   const unlockAndPlaceDecor = useCallback((itemId: GardenItemId) => {
+    const catalogItem = GARDEN_CATALOG.find((c) => c.id === itemId);
+    const defaultPos = catalogItem ? catalogItem.defaultPos : [0, 6];
+
     setUnlockedDecor((prev) => {
       if (prev.includes(itemId)) return prev;
       const next = [...prev, itemId];
       localStorage.setItem('bokssul_unlocked_decor', JSON.stringify(next));
       return next;
     });
-    setPlacedDecor((prev) => {
-      if (prev.includes(itemId)) return prev;
-      const next = [...prev, itemId];
-      localStorage.setItem('bokssul_placed_decor', JSON.stringify(next));
+
+    setDecorLayout((prev) => {
+      const next: GardenDecorMap = {
+        ...prev,
+        [itemId]: { x: defaultPos[0], z: defaultPos[1], rot: 0 },
+      };
+      localStorage.setItem('bokssul_decor_layout', JSON.stringify(next));
       return next;
     });
   }, []);
 
   const togglePlacedDecor = useCallback((itemId: GardenItemId) => {
-    setPlacedDecor((prev) => {
-      const next = prev.includes(itemId)
-        ? prev.filter((id) => id !== itemId)
-        : [...prev, itemId];
-      localStorage.setItem('bokssul_placed_decor', JSON.stringify(next));
+    const catalogItem = GARDEN_CATALOG.find((c) => c.id === itemId);
+    const defaultPos = catalogItem ? catalogItem.defaultPos : [0, 6];
+
+    setDecorLayout((prev) => {
+      const next: GardenDecorMap = { ...prev };
+      if (next[itemId]) {
+        delete next[itemId];
+      } else {
+        next[itemId] = { x: defaultPos[0], z: defaultPos[1], rot: 0 };
+      }
+      localStorage.setItem('bokssul_decor_layout', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // 배치된 조경물을 원하는 바닥 좌표로 이동
+  const moveDecorPosition = useCallback(
+    (itemId: GardenItemId, x: number, z: number) => {
+      setDecorLayout((prev) => {
+        const current = prev[itemId] || { x: 0, z: 0, rot: 0 };
+        const next: GardenDecorMap = {
+          ...prev,
+          [itemId]: {
+            ...current,
+            x: Number(x.toFixed(2)),
+            z: Number(z.toFixed(2)),
+          },
+        };
+        localStorage.setItem('bokssul_decor_layout', JSON.stringify(next));
+        return next;
+      });
+    },
+    []
+  );
+
+  // 배치된 조경물 45도 회전
+  const rotateDecor = useCallback((itemId: GardenItemId) => {
+    setDecorLayout((prev) => {
+      const current = prev[itemId];
+      if (!current) return prev;
+      const next: GardenDecorMap = {
+        ...prev,
+        [itemId]: {
+          ...current,
+          rot: Number(((current.rot + Math.PI / 4) % (Math.PI * 2)).toFixed(2)),
+        },
+      };
+      localStorage.setItem('bokssul_decor_layout', JSON.stringify(next));
       return next;
     });
   }, []);
@@ -311,10 +372,12 @@ export const useGameProgress = () => {
     boostAllPlots,
     harvestBean,
     unlockedDecor,
-    placedDecor,
-    setPlacedDecor,
+    decorLayout,
+    setDecorLayout,
     unlockAndPlaceDecor,
     togglePlacedDecor,
+    moveDecorPosition,
+    rotateDecor,
     claimedCodes,
     redeemO2OCode,
   };

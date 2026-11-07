@@ -1,6 +1,6 @@
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Float, Sparkles } from '@react-three/drei';
+import { Html, Float } from '@react-three/drei';
 import * as THREE from 'three';
 import { getTerrainHeight } from '../../utils/terrain';
 
@@ -9,7 +9,7 @@ export const TraditionalClouds = ({ isNightMode }: { isNightMode: boolean }) => 
 
   useFrame((state) => {
     if (!cloudsRef.current) return;
-    cloudsRef.current.rotation.y = state.clock.elapsedTime * 0.015;
+    cloudsRef.current.rotation.y = state.clock.elapsedTime * 0.012;
   });
 
   const cloudPositions: [number, number, number, number][] = [
@@ -24,22 +24,18 @@ export const TraditionalClouds = ({ isNightMode }: { isNightMode: boolean }) => 
   return (
     <group ref={cloudsRef}>
       {cloudPositions.map(([x, y, z, scale], idx) => (
-        <Float key={idx} speed={1.2} rotationIntensity={0.05} floatIntensity={0.6}>
+        <Float key={idx} speed={1.0} rotationIntensity={0.03} floatIntensity={0.4}>
           <group position={[x, y, z]} scale={scale}>
             <mesh position={[0, 0, 0]}>
-              <sphereGeometry args={[1.6, 16, 16]} />
+              <sphereGeometry args={[1.6, 12, 12]} />
               <meshToonMaterial color={cloudColor} />
             </mesh>
             <mesh position={[1.5, -0.2, 0.2]}>
-              <sphereGeometry args={[1.2, 16, 16]} />
+              <sphereGeometry args={[1.2, 10, 10]} />
               <meshToonMaterial color={cloudColor} />
             </mesh>
             <mesh position={[-1.5, -0.3, -0.1]}>
-              <sphereGeometry args={[1.1, 16, 16]} />
-              <meshToonMaterial color={cloudColor} />
-            </mesh>
-            <mesh position={[2.6, 0.2, 0.3]}>
-              <torusGeometry args={[0.45, 0.22, 10, 20]} />
+              <sphereGeometry args={[1.1, 10, 10]} />
               <meshToonMaterial color={cloudColor} />
             </mesh>
           </group>
@@ -56,8 +52,9 @@ export const UnifiedHillTerrain = ({
 }) => {
   const pointerDownPos = useRef({ x: 0, y: 0 });
 
+  // 지형 폴리곤 수를 72x72로 최적화하여 모바일 GPU 속도 향상
   const terrainGeo = useMemo(() => {
-    const geo = new THREE.PlaneGeometry(64, 64, 110, 110);
+    const geo = new THREE.PlaneGeometry(64, 64, 72, 72);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors: number[] = [];
@@ -80,11 +77,12 @@ export const UnifiedHillTerrain = ({
     return geo;
   }, []);
 
+  // 드로우콜 병목을 일으키던 510개 꽃잎 메쉬를 32개 초경량 꽃송이로 최적화
   const flowers = useMemo(() => {
     const arr = [];
-    for (let i = 0; i < 85; i++) {
-      const angle = Math.random() * Math.PI * 2;
-      const radius = 4.2 + Math.random() * 22;
+    for (let i = 0; i < 32; i++) {
+      const angle = (i * Math.PI * 2) / 32 + (Math.random() - 0.5) * 0.2;
+      const radius = 5.0 + (i % 5) * 3.8;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
       const y = getTerrainHeight(x, z);
@@ -92,8 +90,8 @@ export const UnifiedHillTerrain = ({
         x,
         y,
         z,
-        scale: 0.65 + Math.random() * 0.6,
-        rot: Math.random() * Math.PI,
+        scale: 0.75 + (i % 3) * 0.25,
+        color: i % 2 === 0 ? '#e64a19' : '#facc15',
       });
     }
     return arr;
@@ -108,7 +106,6 @@ export const UnifiedHillTerrain = ({
           pointerDownPos.current = { x: e.clientX, y: e.clientY };
         }}
         onClick={(e) => {
-          // 화면 회전 드래그와 단순 바닥 터치를 구분
           const dragDist = Math.hypot(
             e.clientX - pointerDownPos.current.x,
             e.clientY - pointerDownPos.current.y
@@ -123,30 +120,14 @@ export const UnifiedHillTerrain = ({
       </mesh>
 
       {flowers.map((f, idx) => (
-        <group
+        <mesh
           key={idx}
-          position={[f.x, f.y, f.z]}
-          rotation={[0, f.rot, 0]}
+          position={[f.x, f.y + 0.08, f.z]}
           scale={f.scale}
         >
-          {[0, 1, 2, 3, 4].map((p) => (
-            <mesh
-              key={p}
-              position={[
-                Math.cos((p * Math.PI * 2) / 5) * 0.16,
-                0.06,
-                Math.sin((p * Math.PI * 2) / 5) * 0.16,
-              ]}
-            >
-              <sphereGeometry args={[0.11, 8, 8]} />
-              <meshToonMaterial color="#e64a19" />
-            </mesh>
-          ))}
-          <mesh position={[0, 0.09, 0]}>
-            <sphereGeometry args={[0.08, 8, 8]} />
-            <meshToonMaterial color="#fdd835" />
-          </mesh>
-        </group>
+          <dodecahedronGeometry args={[0.18, 0]} />
+          <meshToonMaterial color={f.color} />
+        </mesh>
       ))}
     </group>
   );
@@ -163,15 +144,10 @@ export const WishTreeAndGuardian = ({
 }) => {
   const treeBaseY = getTerrainHeight(0, 0);
   const guardianY = getTerrainHeight(0, 2.3);
-  const ribbonRef = useRef<THREE.Mesh>(null);
   const guardianGroupRef = useRef<THREE.Group>(null);
   const [pettedTimer, setPettedTimer] = useState(0);
 
-  useFrame((state, delta) => {
-    if (ribbonRef.current) {
-      ribbonRef.current.rotation.z =
-        Math.sin(state.clock.elapsedTime * 2) * 0.15;
-    }
+  useFrame((_, delta) => {
     if (pettedTimer > 0 && guardianGroupRef.current) {
       const next = Math.max(0, pettedTimer - delta);
       setPettedTimer(next);
@@ -193,32 +169,32 @@ export const WishTreeAndGuardian = ({
     <group>
       <group position={[0, treeBaseY, 0]}>
         <mesh position={[0, 2.2, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.7, 1.15, 4.5, 16]} />
+          <cylinderGeometry args={[0.7, 1.15, 4.5, 12]} />
           <meshToonMaterial color="#5d4037" />
         </mesh>
         <mesh position={[0, 1.8, 0]} rotation={[0.1, 0, 0]}>
-          <torusGeometry args={[0.92, 0.08, 10, 24]} />
+          <torusGeometry args={[0.92, 0.08, 8, 20]} />
           <meshToonMaterial color="#facc15" />
         </mesh>
 
         <mesh position={[0, 5.1, 0]} castShadow>
-          <sphereGeometry args={[3.3, 24, 24]} />
+          <sphereGeometry args={[3.3, 18, 18]} />
           <meshToonMaterial color="#33691e" />
         </mesh>
-        <mesh position={[-2.1, 4.3, 1.4]} castShadow>
-          <sphereGeometry args={[2.1, 16, 16]} />
+        <mesh position={[-2.1, 4.3, 1.4]}>
+          <sphereGeometry args={[2.1, 14, 14]} />
           <meshToonMaterial color="#558b2f" />
         </mesh>
-        <mesh position={[2.2, 4.4, 1.2]} castShadow>
-          <sphereGeometry args={[2.2, 16, 16]} />
+        <mesh position={[2.2, 4.4, 1.2]}>
+          <sphereGeometry args={[2.2, 14, 14]} />
           <meshToonMaterial color="#558b2f" />
         </mesh>
-        <mesh position={[0, 4.6, -2.1]} castShadow>
-          <sphereGeometry args={[2.3, 16, 16]} />
+        <mesh position={[0, 4.6, -2.1]}>
+          <sphereGeometry args={[2.3, 14, 14]} />
           <meshToonMaterial color="#33691e" />
         </mesh>
-        <mesh position={[0, 6.6, 0]} castShadow>
-          <sphereGeometry args={[2.2, 16, 16]} />
+        <mesh position={[0, 6.6, 0]}>
+          <sphereGeometry args={[2.2, 14, 14]} />
           <meshToonMaterial color="#689f38" />
         </mesh>
       </group>
@@ -233,102 +209,68 @@ export const WishTreeAndGuardian = ({
         onPointerOver={() => (document.body.style.cursor = 'pointer')}
         onPointerOut={() => (document.body.style.cursor = 'auto')}
       >
-        {/* 쓰담쓰담 시 황금 꽃비 파티클 */}
-        {pettedTimer > 0 && (
-          <Sparkles
-            count={45}
-            scale={4}
-            position={[0, 2, 0]}
-            size={6}
-            speed={2}
-            color="#facc15"
-          />
-        )}
-
         <mesh position={[0, 0.85, 0]} castShadow>
-          <sphereGeometry args={[0.95, 24, 24]} />
+          <sphereGeometry args={[0.95, 18, 18]} />
           <meshToonMaterial color="#ffffff" />
         </mesh>
-        <mesh position={[-0.55, 0.7, 0.15]} castShadow>
-          <sphereGeometry args={[0.6, 16, 16]} />
+        <mesh position={[-0.55, 0.7, 0.15]}>
+          <sphereGeometry args={[0.6, 12, 12]} />
           <meshToonMaterial color="#ffffff" />
         </mesh>
-        <mesh position={[0.55, 0.7, 0.15]} castShadow>
-          <sphereGeometry args={[0.6, 16, 16]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-
-        <mesh position={[0, 1.75, 0.15]} castShadow>
-          <sphereGeometry args={[0.78, 24, 24]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[-0.65, 1.55, 0.1]} castShadow>
-          <capsuleGeometry args={[0.25, 0.5, 8, 16]} />
-          <meshToonMaterial color="#ffffff" />
-        </mesh>
-        <mesh position={[0.65, 1.55, 0.1]} castShadow>
-          <capsuleGeometry args={[0.25, 0.5, 8, 16]} />
+        <mesh position={[0.55, 0.7, 0.15]}>
+          <sphereGeometry args={[0.6, 12, 12]} />
           <meshToonMaterial color="#ffffff" />
         </mesh>
 
-        <mesh position={[0, 2.65, 0.1]} castShadow>
-          <sphereGeometry args={[0.38, 16, 16]} />
+        <mesh position={[0, 1.75, 0.15]}>
+          <sphereGeometry args={[0.78, 16, 16]} />
+          <meshToonMaterial color="#ffffff" />
+        </mesh>
+        <mesh position={[-0.65, 1.55, 0.1]}>
+          <capsuleGeometry args={[0.25, 0.5, 6, 12]} />
+          <meshToonMaterial color="#ffffff" />
+        </mesh>
+        <mesh position={[0.65, 1.55, 0.1]}>
+          <capsuleGeometry args={[0.25, 0.5, 6, 12]} />
+          <meshToonMaterial color="#ffffff" />
+        </mesh>
+
+        <mesh position={[0, 2.65, 0.1]}>
+          <sphereGeometry args={[0.38, 12, 12]} />
           <meshToonMaterial color="#ffffff" />
         </mesh>
         <mesh position={[0, 2.38, 0.1]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[0.24, 0.08, 10, 20]} />
+          <torusGeometry args={[0.24, 0.08, 8, 16]} />
           <meshToonMaterial color="#d84315" />
         </mesh>
 
         <mesh position={[0, 1.82, 0.88]}>
-          <sphereGeometry args={[0.15, 12, 12]} />
+          <sphereGeometry args={[0.15, 10, 10]} />
           <meshBasicMaterial color="#1c1917" />
         </mesh>
         <mesh position={[-0.26, 1.98, 0.82]}>
-          <sphereGeometry args={[0.08, 12, 12]} />
+          <sphereGeometry args={[0.08, 10, 10]} />
           <meshBasicMaterial color="#1c1917" />
         </mesh>
         <mesh position={[0.26, 1.98, 0.82]}>
-          <sphereGeometry args={[0.08, 12, 12]} />
+          <sphereGeometry args={[0.08, 10, 10]} />
           <meshBasicMaterial color="#1c1917" />
         </mesh>
 
         {[-0.48, 0.48].map((px, i) => (
           <group key={i} position={[px, 0.38, 0.82]}>
-            <mesh castShadow>
-              <sphereGeometry args={[0.36, 16, 16]} />
+            <mesh>
+              <sphereGeometry args={[0.36, 12, 12]} />
               <meshToonMaterial color="#ffffff" />
             </mesh>
             <mesh position={[0, -0.04, 0.33]}>
-              <sphereGeometry args={[0.13, 12, 12]} />
-              <meshBasicMaterial color="#1c1917" />
-            </mesh>
-            <mesh position={[-0.1, 0.12, 0.31]}>
-              <sphereGeometry args={[0.055, 8, 8]} />
-              <meshBasicMaterial color="#1c1917" />
-            </mesh>
-            <mesh position={[0, 0.15, 0.32]}>
-              <sphereGeometry args={[0.055, 8, 8]} />
-              <meshBasicMaterial color="#1c1917" />
-            </mesh>
-            <mesh position={[0.1, 0.12, 0.31]}>
-              <sphereGeometry args={[0.055, 8, 8]} />
+              <sphereGeometry args={[0.13, 8, 8]} />
               <meshBasicMaterial color="#1c1917" />
             </mesh>
           </group>
         ))}
 
-        <group position={[-0.75, 1.65, 0.55]}>
-          <mesh castShadow>
-            <sphereGeometry args={[0.28, 16, 16]} />
-            <meshToonMaterial color="#ffffff" />
-          </mesh>
-          <mesh ref={ribbonRef} position={[-0.35, 0.35, 0.1]} rotation={[0, 0, 0.6]}>
-            <torusGeometry args={[0.45, 0.06, 8, 24, Math.PI * 1.3]} />
-            <meshToonMaterial color="#facc15" />
-          </mesh>
-        </group>
-
+        {/* 가까이 다가갔을 때만 말풍선 표시 */}
         {!hideLabels && (showGreeting || pettedTimer > 0) && (
           <Html
             position={[0, 3.15, 0]}
@@ -336,11 +278,11 @@ export const WishTreeAndGuardian = ({
             distanceFactor={15}
             zIndexRange={[10, 0]}
           >
-            <div className="px-3 py-1 bg-amber-50/95 border-2 border-amber-500 rounded-full shadow-lg text-center whitespace-nowrap pointer-events-none animate-bounce">
+            <div className="px-3 py-1 bg-amber-50/95 border-2 border-amber-500 rounded-full shadow-lg text-center whitespace-nowrap pointer-events-none">
               <span className="text-[11px] font-extrabold text-amber-950">
                 {pettedTimer > 0
-                  ? '🐾 복쓸싸리: "쓰담쓰담 고맙싸리! 만복이 쏟아진다싸리 ✨"'
-                  : '🐾 복쓸싸리: "복 기운을 나눠주겠다싸리"'}
+                  ? '🐾 수호신 복쓸싸리: "참배 고맙개! 복기운을 받으시개 ✨"'
+                  : '🐾 복쓸싸리 터치 시 참배 & 기원 올리기 버튼 활성화!'}
               </span>
             </div>
           </Html>

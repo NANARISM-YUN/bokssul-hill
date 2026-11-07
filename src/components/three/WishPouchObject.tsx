@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Html, Sparkles, Float } from '@react-three/drei';
+import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { Crown } from 'lucide-react';
 import type { Wish } from '../../types/wish';
@@ -89,126 +89,90 @@ export const WishPouchObject = ({
       }}
     >
       {!isStarOrAscending ? (
-        <Float speed={2.5} rotationIntensity={0.15} floatIntensity={0.35}>
-          <group>
-            {wish.isMine && (
-              <mesh position={[0, 1.2, 0]}>
-                <cylinderGeometry args={[0.08, 0.45, 3.2, 16]} />
-                <meshBasicMaterial
-                  color="#fde047"
-                  transparent
-                  opacity={0.32}
-                  depthWrite={false}
-                />
-              </mesh>
-            )}
-
-            {isQiFull && (
-              <>
-                <mesh>
-                  <sphereGeometry args={[0.62, 16, 16]} />
-                  <meshBasicMaterial
-                    color="#facc15"
-                    transparent
-                    opacity={0.35}
-                  />
-                </mesh>
-                <Sparkles
-                  count={25}
-                  scale={1.8}
-                  size={4}
-                  speed={1.2}
-                  color="#fef08a"
-                />
-                <pointLight color="#fbbf24" intensity={2} distance={5} />
-              </>
-            )}
-
-            <mesh position={[0, 0.48, 0]}>
-              <cylinderGeometry args={[0.018, 0.018, 0.55]} />
-              <meshBasicMaterial color="#fde047" />
+        <group>
+          {isQiFull && (
+            <mesh>
+              <sphereGeometry args={[0.58, 12, 12]} />
+              <meshBasicMaterial
+                color="#facc15"
+                transparent
+                opacity={0.32}
+              />
             </mesh>
+          )}
 
-            <mesh castShadow>
-              <sphereGeometry args={[0.38, 20, 20]} />
-              <meshToonMaterial color={wish.color} />
-            </mesh>
-            <mesh position={[0, 0.26, 0]} rotation={[Math.PI / 2, 0, 0]}>
-              <torusGeometry args={[0.21, 0.05, 10, 20]} />
-              <meshToonMaterial color="#facc15" />
-            </mesh>
-            <mesh position={[0, 0.35, 0]}>
-              <cylinderGeometry args={[0.27, 0.16, 0.16, 12]} />
-              <meshToonMaterial color={wish.color} />
-            </mesh>
+          <mesh position={[0, 0.48, 0]}>
+            <cylinderGeometry args={[0.018, 0.018, 0.55]} />
+            <meshBasicMaterial color="#fde047" />
+          </mesh>
 
-            <group ref={orbsRef}>
-              {wish.blessings.map((b, idx) => {
-                const angle =
-                  (idx * Math.PI * 2) / Math.max(1, wish.blessings.length);
-                return (
-                  <mesh
-                    key={b.id}
-                    position={[
-                      Math.cos(angle) * 0.6,
-                      0.05,
-                      Math.sin(angle) * 0.6,
-                    ]}
-                  >
-                    <sphereGeometry args={[0.09, 12, 12]} />
-                    <meshStandardMaterial
-                      color="#fef08a"
-                      emissive="#f59e0b"
-                      emissiveIntensity={2}
-                    />
-                  </mesh>
-                );
-              })}
-            </group>
+          <mesh>
+            <sphereGeometry args={[0.38, 14, 14]} />
+            <meshToonMaterial color={wish.color} />
+          </mesh>
+          <mesh position={[0, 0.26, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.21, 0.05, 8, 16]} />
+            <meshToonMaterial color="#facc15" />
+          </mesh>
+          <mesh position={[0, 0.35, 0]}>
+            <cylinderGeometry args={[0.27, 0.16, 0.16, 10]} />
+            <meshToonMaterial color={wish.color} />
+          </mesh>
 
-            {shouldShowHangingBadge && (
-              <Html
-                position={[0, -0.62, 0]}
-                center
-                distanceFactor={14}
-                zIndexRange={[10, 0]}
-              >
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelect(wish);
-                  }}
-                  className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shadow-md whitespace-nowrap flex items-center gap-1 transition transform ${
-                    isQiFull
-                      ? 'bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 text-stone-950 ring-1 ring-white'
-                      : wish.isMine
-                      ? 'bg-amber-950/95 text-amber-200 ring-1 ring-amber-400'
-                      : 'bg-stone-900/85 text-amber-100 border border-amber-400/40'
-                  }`}
+          <group ref={orbsRef}>
+            {wish.blessings.slice(0, 6).map((b, idx, arr) => {
+              const angle = (idx * Math.PI * 2) / Math.max(1, arr.length);
+              return (
+                <mesh
+                  key={b.id}
+                  position={[
+                    Math.cos(angle) * 0.58,
+                    0.05,
+                    Math.sin(angle) * 0.58,
+                  ]}
                 >
-                  {wish.isMine && (
-                    <Crown className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
-                  )}
-                  <span>
-                    {isQiFull ? `✨ ${wish.nickname}` : wish.nickname}
-                  </span>
-                  <span
-                    className={
-                      isQiFull ? 'text-rose-900 font-black' : 'text-amber-300'
-                    }
-                  >
-                    ({wish.blessings.length}/{wish.targetBlessings})
-                  </span>
-                </button>
-              </Html>
-            )}
+                  <sphereGeometry args={[0.08, 8, 8]} />
+                  <meshBasicMaterial color="#fef08a" />
+                </mesh>
+              );
+            })}
           </group>
-        </Float>
+
+          {shouldShowHangingBadge && (
+            <Html
+              position={[0, -0.62, 0]}
+              center
+              distanceFactor={14}
+              zIndexRange={[10, 0]}
+            >
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelect(wish);
+                }}
+                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold shadow-md whitespace-nowrap flex items-center gap-1 transition transform ${
+                  isQiFull
+                    ? 'bg-amber-400 text-stone-950 ring-1 ring-white'
+                    : wish.isMine
+                    ? 'bg-amber-950/95 text-amber-200 ring-1 ring-amber-400'
+                    : 'bg-stone-900/85 text-amber-100 border border-amber-400/40'
+                }`}
+              >
+                {wish.isMine && (
+                  <Crown className="w-3 h-3 text-amber-400 fill-amber-400 shrink-0" />
+                )}
+                <span>{wish.nickname}</span>
+                <span className="text-amber-300">
+                  ({wish.blessings.length}/{wish.targetBlessings})
+                </span>
+              </button>
+            </Html>
+          )}
+        </group>
       ) : (
         <group>
-          {/* 모바일에서도 별이 아주 잘 눌리도록 2.5배 크기의 투명 터치 영역 추가 */}
           <mesh>
-            <sphereGeometry args={[2.2, 12, 12]} />
+            <sphereGeometry args={[2.2, 8, 8]} />
             <meshBasicMaterial transparent opacity={0} depthWrite={false} />
           </mesh>
 
@@ -217,24 +181,17 @@ export const WishPouchObject = ({
             <meshStandardMaterial
               color="#fffbeb"
               emissive={wish.isMine ? '#fbbf24' : '#f59e0b'}
-              emissiveIntensity={wish.isMine ? 4.5 : 3.2}
+              emissiveIntensity={3.5}
               toneMapped={false}
             />
           </mesh>
           {wish.isMine && (
             <mesh rotation={[Math.PI / 3, 0, 0]}>
-              <torusGeometry args={[1.35, 0.05, 12, 32]} />
+              <torusGeometry args={[1.35, 0.05, 8, 24]} />
               <meshBasicMaterial color="#fde047" />
             </mesh>
           )}
-          <pointLight color="#fbbf24" intensity={3.5} distance={12} />
-          <Sparkles
-            count={wish.isMine ? 35 : 20}
-            scale={3.2}
-            size={5}
-            speed={0.8}
-            color="#fef08a"
-          />
+
           {!hideLabels && (
             <Html
               position={[0, -1.15, 0]}
@@ -250,10 +207,10 @@ export const WishPouchObject = ({
                 className={`px-3 py-1 rounded-full text-xs font-extrabold shadow-xl whitespace-nowrap transition transform active:scale-95 flex items-center gap-1 ${
                   wish.isMine
                     ? 'bg-amber-400 text-stone-950 ring-2 ring-white'
-                    : 'bg-indigo-950/85 hover:bg-indigo-900 backdrop-blur-md border border-amber-300/80 text-amber-200'
+                    : 'bg-indigo-950/85 hover:bg-indigo-900 border border-amber-300/80 text-amber-200'
                 }`}
               >
-                {wish.isMine ? '👑' : '⭐'} {wish.nickname}님의 별 보기
+                {wish.isMine ? '👑' : '⭐'} {wish.nickname}님의 별
               </button>
             </Html>
           )}

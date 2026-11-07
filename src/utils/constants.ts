@@ -8,16 +8,17 @@ import type {
 } from '../types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './terrain';
 
-export const TARGET_BLESSINGS = 5;
+export const TARGET_BLESSINGS = 10; // 10번의 응원이 모여야 별 승천 개방
 
-export const WISH_KARMA_COST = 15;
-export const WISH_BEAN_KARMA_COST = 10;
-export const BLESS_KARMA_COST = 2;
+export const WISH_KARMA_COST = 50;      // 기원 인장 올리기 50공덕
+export const WISH_BEAN_KARMA_COST = 35; // 붉은 팥 1알 사용 시 35공덕 + 초기 기운 +3
+export const BLESS_KARMA_COST = 5;      // 이웃 소원 응원 시 5공덕 소모 (보시 보너스 +7 반환)
 
+// 5~10분 몰입형 보상화 개화 단계
 export const KARMA_THRESHOLDS = {
-  SPROUT: 10,
-  BUD: 20,
-  BLOOM: 30, // 하루 3~5분 플레이(30공덕)로 오늘의 보상화 만개 & 오늘의 운세 해금!
+  SPROUT: 25, // 1단계: 새싹
+  BUD: 60,    // 2단계: 꽃봉오리
+  BLOOM: 100, // 3단계: 오늘의 보상화 만개 & 운세 부적 해금!
 };
 
 export const FLOWER_TYPES: FlowerType[] = [
@@ -36,7 +37,6 @@ export const FLOWER_NAMES: Record<FlowerType, string> = {
   blue_bosang: '💠 청보상화',
 };
 
-// 오늘의 보상화별 점괘 & 부적 문구 데이터베이스
 export interface DailyFortuneInfo {
   title: string;
   hanja: string;
@@ -106,26 +106,25 @@ export const DAILY_FORTUNES: Record<FlowerType, DailyFortuneInfo> = {
   },
 };
 
-// O2O 오프라인 매장 / 실물 굿즈 연동 프로토타입 코드 목록
 export const O2O_REWARD_CODES: Record<
   string,
   { title: string; karma: number; beans: number; badge: string }
 > = {
   황리단길: {
     title: '🏮 황리단길 복쓸싸리 성지 방문 인증',
-    karma: 30,
+    karma: 100,
     beans: 5,
     badge: '👑 성지순례 금관',
   },
   팥키링: {
     title: '🫘 경주 붉은팥 액막이 키링 소장 인증',
-    karma: 35,
+    karma: 100,
     beans: 8,
     badge: '🧿 액막이 수호자',
   },
   복쓸싸리: {
     title: '🐾 복쓸싸리 스페셜 프렌즈 기프트',
-    karma: 30,
+    karma: 100,
     beans: 5,
     badge: '✨ 복쓸 프렌즈',
   },
@@ -198,7 +197,7 @@ export interface GardenCatalogItem {
   desc: string;
   karmaCost: number;
   beanCost: number;
-  pos: [number, number];
+  defaultPos: [number, number];
 }
 
 export const GARDEN_CATALOG: GardenCatalogItem[] = [
@@ -206,55 +205,55 @@ export const GARDEN_CATALOG: GardenCatalogItem[] = [
     id: 'campfire',
     name: '따뜻한 모닥불 화로',
     icon: '🔥',
-    desc: '타오르는 불꽃과 통나무 쉼터로 동산을 아늑하게 데워줍니다',
-    karmaCost: 10,
-    beanCost: 1,
-    pos: [0, 10.2],
+    desc: '타오르는 불꽃과 돌 테두리로 동산을 아늑하게 데워줍니다',
+    karmaCost: 25,
+    beanCost: 2,
+    defaultPos: [0, 0.5],
   },
   {
     id: 'cherry_tree',
     name: '천년 겹벚꽃 나무',
     icon: '🌸',
     desc: '화사한 분홍 꽃비가 흩날리는 영험한 벚꽃나무입니다',
-    karmaCost: 15,
-    beanCost: 2,
-    pos: [-6.5, 7.2],
+    karmaCost: 40,
+    beanCost: 4,
+    defaultPos: [-4.8, -1.5],
   },
   {
     id: 'stone_pagoda',
     name: '오층 황금 소원석탑',
     icon: '🪨',
     desc: '꼭대기에 황금 보주가 회전하며 동산의 복기운을 모아줍니다',
-    karmaCost: 15,
-    beanCost: 2,
-    pos: [6.5, 7.2],
+    karmaCost: 40,
+    beanCost: 4,
+    defaultPos: [4.8, -1.5],
   },
   {
     id: 'wood_bench',
     name: '풍류 대청 평상',
     icon: '🪵',
     desc: '친구들과 올라가 다과를 즐기며 식빵을 굽기 좋은 넓은 평상입니다',
-    karmaCost: 12,
-    beanCost: 1,
-    pos: [-5.2, 11.2],
+    karmaCost: 30,
+    beanCost: 3,
+    defaultPos: [-4.5, 7.2],
   },
   {
     id: 'lantern_pair',
     name: '청사초롱 쌍등',
     icon: '🏮',
     desc: '전통 청홍 비단 등불이 동산의 밤길을 환하게 밝혀줍니다',
-    karmaCost: 12,
-    beanCost: 1,
-    pos: [5.2, 11.2],
+    karmaCost: 30,
+    beanCost: 3,
+    defaultPos: [4.5, 7.2],
   },
   {
     id: 'ssari_gate',
     name: '액막이 황금 싸리문',
     icon: '🎐',
     desc: '금줄과 싸리나무로 엮어 사악한 기운을 막아주는 전통 대문입니다',
-    karmaCost: 20,
-    beanCost: 3,
-    pos: [0, 14.2],
+    karmaCost: 60,
+    beanCost: 6,
+    defaultPos: [0, 11.2],
   },
 ];
 
@@ -293,7 +292,6 @@ export const ORB_PALETTE = [
   '#e040fb',
 ];
 
-// [진단사항 1 반영] 처음에는 구슬 1개만 나와 있고, 나머지 2개는 액운을 쓸어 정화할 때 그 자리에서 드랍됨!
 export const generateScatteredOrbs = (): RollingOrb[] => {
   const palette = [...ORB_PALETTE].sort(() => Math.random() - 0.5);
   return [0, 1, 2].map((idx) => ({
@@ -303,39 +301,40 @@ export const generateScatteredOrbs = (): RollingOrb[] => {
     vx: 0,
     vz: 0,
     color: palette[idx],
-    // 첫 번째 구슬만 필드에 나와있고, 나머지 2개는 액운을 잡으면 스폰되도록 대기(collected: true 상태 응용)
     collected: idx > 0,
     ownerId: null,
     updatedAt: Date.now(),
   }));
 };
 
+// ⭐ [난이도 대폭 상향] 일반 액운 HP 30!
 export const generateInitialSpirits = (): MisfortuneSpirit[] => {
-  return [0, 1, 2, 3].map((idx) => {
-    const angle = (idx * Math.PI) / 2 + (Math.random() - 0.5) * 0.6;
-    const radius = 7.5 + Math.random() * 8.5;
+  return [0, 1, 2].map((idx) => {
+    const angle = (idx * Math.PI * 2) / 3 + (Math.random() - 0.5) * 0.5;
+    const radius = 8.0 + Math.random() * 7.5;
     return {
-      id: `spirit_${idx}_${Date.now()}`,
+      id: `spirit_${idx}_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`,
       x: Number((Math.cos(angle) * radius).toFixed(2)),
       z: Number((Math.sin(angle) * radius).toFixed(2)),
-      hp: 3,
-      maxHp: 3,
-      scale: 0.9 + Math.random() * 0.35,
+      hp: 30,
+      maxHp: 30,
+      scale: 0.95 + Math.random() * 0.25,
       isBoss: false,
     };
   });
 };
 
+// ⭐ [난이도 대폭 상향] 거대 먹구름 대액운(보스) HP 150!
 export const generateBossSpirit = (): MisfortuneSpirit => {
   const angle = (Math.random() - 0.5) * 1.4;
-  const radius = 9.0 + Math.random() * 3.0;
+  const radius = 9.5 + Math.random() * 2.5;
   return {
     id: `boss_${Date.now()}`,
     x: Number((Math.sin(angle) * radius).toFixed(2)),
     z: Number((Math.cos(angle) * radius).toFixed(2)),
-    hp: 10,
-    maxHp: 10,
-    scale: 2.2,
+    hp: 150,
+    maxHp: 150,
+    scale: 2.3,
     isBoss: true,
   };
 };
@@ -367,13 +366,12 @@ export const INITIAL_WISHES: Wish[] = [
     content: '🌿 무병 · 심신평안',
     isMine: false,
     hasMyBlessing: false,
-    blessings: [
-      { id: 'b4', author: '첨성대별지기', stamp: '🍀', time: '5분 전' },
-      { id: 'b5', author: '달빛산책', stamp: '🙏', time: '3분 전' },
-      { id: 'b6', author: '복쓸덩이친구', stamp: '❤️', time: '2분 전' },
-      { id: 'b7', author: '선청이', stamp: '✨', time: '1분 전' },
-      { id: 'b8', author: '경주복쓸이', stamp: '🙏', time: '방금 전' },
-    ],
+    blessings: Array.from({ length: 9 }, (_, i) => ({
+      id: `b_init_${i}`,
+      author: `이웃복쓸이${i + 1}`,
+      stamp: ['🍀', '🙏', '❤️', '✨'][i % 4],
+      time: '방금 전',
+    })),
     targetBlessings: TARGET_BLESSINGS,
     status: 'hanging',
     branchPos: BRANCH_POSITIONS[1],
@@ -387,13 +385,12 @@ export const INITIAL_WISHES: Wish[] = [
     content: '💰 재복 · 풍요성취',
     isMine: false,
     hasMyBlessing: true,
-    blessings: [
-      { id: 'b9', author: '경주복쓸이', stamp: '✨', time: '10분 전' },
-      { id: 'b10', author: '달빛산책', stamp: '🙏', time: '8분 전' },
-      { id: 'b11', author: '선청이', stamp: '🍀', time: '6분 전' },
-      { id: 'b12', author: '포항해맞이', stamp: '❤️', time: '4분 전' },
-      { id: 'b13', author: '첨성대별지기', stamp: '✨', time: '1분 전' },
-    ],
+    blessings: Array.from({ length: 10 }, (_, i) => ({
+      id: `b_star_${i}`,
+      author: `별지기${i + 1}`,
+      stamp: '✨',
+      time: '10분 전',
+    })),
     targetBlessings: TARGET_BLESSINGS,
     status: 'star',
     branchPos: BRANCH_POSITIONS[2],
