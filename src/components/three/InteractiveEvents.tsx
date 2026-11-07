@@ -36,55 +36,145 @@ export const ClickTargetMarker = ({
   );
 };
 
-const SingleMeteor = ({ seed }: { seed: number }) => {
-  const ref = useRef<THREE.Group>(null);
-  const speed = 16 + (seed % 7) * 2;
-  const offset = seed * 1.7;
+// --- 홍보영상 3번째 캡처 재현: 황금빛 네온 '복' 주머니 프로시저럴 텍스처 생성기 (단 1회 생성 후 공유) ---
+let cachedBokPouchTexture: THREE.CanvasTexture | null = null;
+const getNeonBokPouchTexture = (): THREE.CanvasTexture => {
+  if (cachedBokPouchTexture) return cachedBokPouchTexture;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+
+  if (ctx) {
+    ctx.clearRect(0, 0, 256, 256);
+
+    // 은은한 황금빛 후광 배경
+    const grad = ctx.createRadialGradient(128, 138, 15, 128, 138, 108);
+    grad.addColorStop(0, 'rgba(254, 240, 138, 0.42)');
+    grad.addColorStop(0.6, 'rgba(250, 204, 21, 0.16)');
+    grad.addColorStop(1, 'rgba(250, 204, 21, 0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 256, 256);
+
+    // 네온 황금 선 스타일 설정
+    ctx.strokeStyle = '#fef08a';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = '#facc15';
+    ctx.shadowBlur = 16;
+
+    // 1. 복주머니 둥근 몸통 외곽선
+    ctx.beginPath();
+    ctx.arc(128, 156, 64, -0.22 * Math.PI, 1.22 * Math.PI, false);
+    ctx.stroke();
+
+    // 2. 복주머니 위쪽 주름진 프릴 입구
+    ctx.beginPath();
+    ctx.moveTo(82, 112);
+    ctx.quadraticCurveTo(62, 62, 96, 52);
+    ctx.quadraticCurveTo(114, 66, 128, 48);
+    ctx.quadraticCurveTo(144, 66, 162, 52);
+    ctx.quadraticCurveTo(194, 62, 174, 112);
+    ctx.stroke();
+
+    // 3. 주름선 디테일
+    ctx.lineWidth = 4.5;
+    ctx.beginPath();
+    ctx.moveTo(112, 74);
+    ctx.lineTo(118, 102);
+    ctx.moveTo(144, 74);
+    ctx.lineTo(138, 102);
+    ctx.stroke();
+
+    // 4. 나비 리본 매듭과 양옆 끈
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(102, 106, 22, 11, -0.25, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(154, 106, 22, 11, 0.25, 0, Math.PI * 2);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.moveTo(96, 112);
+    ctx.quadraticCurveTo(68, 125, 58, 142);
+    ctx.moveTo(156, 112);
+    ctx.quadraticCurveTo(176, 135, 172, 162);
+    ctx.stroke();
+
+    // 5. 정중앙 네온 한글 '복' 글자
+    ctx.fillStyle = '#fef08a';
+    ctx.font = '900 58px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('복', 128, 164);
+  }
+
+  cachedBokPouchTexture = new THREE.CanvasTexture(canvas);
+  return cachedBokPouchTexture;
+};
+
+// 하늘에서 둥실둥실 내려오는 개별 황금 '복' 주머니
+const SingleFallingBokPouch = ({
+  seed,
+  texture,
+}: {
+  seed: number;
+  texture: THREE.CanvasTexture;
+}) => {
+  const spriteRef = useRef<THREE.Sprite>(null);
+  const fallSpeed = 4.2 + (seed % 5) * 0.9;
+  const offset = seed * 1.3;
 
   useFrame((state) => {
-    if (!ref.current) return;
-    const t = (state.clock.elapsedTime * 0.75 + offset) % 2.4;
-    const startX = -22 + (seed % 6) * 9;
-    const startY = 27 + (seed % 4) * 3;
-    const startZ = -18 + (seed % 5) * 6;
+    if (!spriteRef.current) return;
+    const t = (state.clock.elapsedTime * 0.55 + offset) % 4.5;
 
-    ref.current.position.set(
-      startX + t * speed,
-      startY - t * (speed * 0.72),
-      startZ + t * 4
-    );
-    ref.current.rotation.z = -Math.PI / 4;
+    const startX = -18 + ((seed * 7) % 36);
+    const startZ = -14 + ((seed * 5) % 28);
+    const swayX = Math.sin(state.clock.elapsedTime * 2 + seed) * 1.4;
+    const curY = 25 - t * fallSpeed;
+
+    spriteRef.current.position.set(startX + swayX, curY, startZ);
+    spriteRef.current.material.rotation =
+      Math.sin(state.clock.elapsedTime * 2.5 + seed) * 0.28;
+
+    const scale = 2.4 + (seed % 3) * 0.55;
+    spriteRef.current.scale.set(scale, scale, 1);
   });
 
   return (
-    <group ref={ref}>
-      <mesh>
-        <octahedronGeometry args={[0.42, 0]} />
-        <meshBasicMaterial color="#fef08a" />
-      </mesh>
-      <mesh position={[-1.9, 1.9, 0]} rotation={[0, 0, Math.PI / 4]}>
-        <cylinderGeometry args={[0.02, 0.28, 3.8, 8]} />
-        <meshBasicMaterial color="#fde047" transparent opacity={0.65} />
-      </mesh>
-    </group>
+    <sprite ref={spriteRef}>
+      <spriteMaterial
+        map={texture}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </sprite>
   );
 };
 
+// 하늘에서 쏟아지는 황금빛 네온 '복' 주머니 축제 이펙트
 export const MeteorShowerEffect = ({ active }: { active: boolean }) => {
-  const seeds = useMemo(() => Array.from({ length: 14 }, (_, i) => i + 1), []);
+  const seeds = useMemo(() => Array.from({ length: 16 }, (_, i) => i + 1), []);
+  const texture = useMemo(() => getNeonBokPouchTexture(), []);
+
   if (!active) return null;
 
   return (
     <group>
       {seeds.map((s) => (
-        <SingleMeteor key={s} seed={s} />
+        <SingleFallingBokPouch key={s} seed={s} texture={texture} />
       ))}
       <Sparkles
-        count={180}
-        scale={[45, 25, 45]}
-        position={[0, 16, 0]}
-        size={6}
-        speed={1.8}
+        count={60}
+        scale={[36, 22, 36]}
+        position={[0, 14, 0]}
+        size={5}
+        speed={1.2}
         color="#fde047"
       />
     </group>
@@ -153,7 +243,6 @@ const SmoothRollingOrbMesh = ({
       } else {
         const prevX = renderPos.current.x;
         const prevZ = renderPos.current.z;
-        // 부드러운 추적으로 멀티플레이 네트워크 지연 흡수
         renderPos.current.x = THREE.MathUtils.lerp(
           prevX,
           orb.x,
@@ -192,7 +281,6 @@ const SmoothRollingOrbMesh = ({
           metalness={0.1}
         />
       </mesh>
-      <Sparkles count={7} scale={1.2} size={3} color="#ffffff" />
     </group>
   );
 };
@@ -238,7 +326,6 @@ export const WishAltarAndOrbs = ({
       const orb = orbs[i];
       if (orb.collected) continue;
 
-      // ① 내 복쓸덩이가 공을 치면 즉시 이 공의 주도권(ownerId = myId)을 획득!
       const dx = orb.x - pPos.x;
       const dz = orb.z - pPos.z;
       const dist = Math.hypot(dx, dz);
@@ -257,7 +344,6 @@ export const WishAltarAndOrbs = ({
         myOrbsMoved = true;
       }
 
-      // ⭐ 핵심: 다른 유저가 최근 2초 내에 친 공은 그 유저가 물리 연산을 전담하므로 내 폰에서는 관성 추측(Dead Reckoning)만 가볍게 수행
       const isOwnedByOther =
         orb.ownerId &&
         orb.ownerId !== myId &&
@@ -271,7 +357,6 @@ export const WishAltarAndOrbs = ({
         continue;
       }
 
-      // ② 내가 주도권을 가진 공끼리의 충돌 및 물리 연산
       for (let j = i + 1; j < orbs.length; j++) {
         const other = orbs[j];
         if (other.collected) continue;
@@ -341,7 +426,6 @@ export const WishAltarAndOrbs = ({
         orb.vz = 0;
       }
 
-      // 내가 친 공이 바구니에 골인했을 때
       if (orb.ownerId === myId) {
         const distToBasket = Math.hypot(orb.x - altarX, orb.z - altarZ);
         if (distToBasket < 2.35 && distToBasket > 1.32) {
@@ -369,22 +453,22 @@ export const WishAltarAndOrbs = ({
     <group>
       <group position={[altarX, altarY, altarZ]}>
         <mesh position={[0, -0.1, 0]} receiveShadow>
-          <cylinderGeometry args={[1.65, 1.85, 0.55, 28]} />
+          <cylinderGeometry args={[1.65, 1.85, 0.55, 24]} />
           <meshToonMaterial color="#5d4037" />
         </mesh>
 
-        <mesh position={[0, 0.28, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[1.55, 1.25, 0.55, 28, 1, true]} />
+        <mesh position={[0, 0.28, 0]}>
+          <cylinderGeometry args={[1.55, 1.25, 0.55, 24, 1, true]} />
           <meshToonMaterial color="#8d6e63" side={THREE.DoubleSide} />
         </mesh>
 
         <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.52, 0.12, 12, 32]} />
+          <torusGeometry args={[1.52, 0.12, 10, 28]} />
           <meshToonMaterial color={meteorActive ? '#fef08a' : '#facc15'} />
         </mesh>
 
         <mesh position={[0, 0.18, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[1.38, 28]} />
+          <circleGeometry args={[1.38, 24]} />
           <meshBasicMaterial color={meteorActive ? '#fef08a' : '#1c1917'} />
         </mesh>
 
@@ -396,25 +480,15 @@ export const WishAltarAndOrbs = ({
               key={idx}
               position={[Math.cos(angle) * 1.52, 0.68, Math.sin(angle) * 1.52]}
             >
-              <sphereGeometry args={[0.2, 16, 16]} />
+              <sphereGeometry args={[0.2, 12, 12]} />
               <meshStandardMaterial
                 color={isFilled ? '#fef08a' : '#44403c'}
                 emissive={isFilled ? '#f59e0b' : '#000000'}
-                emissiveIntensity={isFilled ? 2.8 : 0}
+                emissiveIntensity={isFilled ? 2.5 : 0}
               />
             </mesh>
           );
         })}
-
-        {meteorActive && (
-          <Sparkles
-            count={35}
-            scale={3}
-            position={[0, 1.2, 0]}
-            size={5}
-            color="#fde047"
-          />
-        )}
 
         {!hideLabels && (
           <Html
@@ -425,7 +499,7 @@ export const WishAltarAndOrbs = ({
           >
             <div className="px-2.5 py-0.5 bg-stone-900/85 backdrop-blur-sm border border-amber-400/60 rounded-full text-[10px] font-extrabold text-amber-200 whitespace-nowrap shadow-md pointer-events-none">
               {meteorActive
-                ? '🌠 별똥별 축제 중!'
+                ? '🧧 하늘에서 복주머니가 쏟아집니다!'
                 : `🧺 복바구니 ${collectedCount} / 3`}
             </div>
           </Html>

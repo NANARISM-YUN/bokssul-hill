@@ -18,7 +18,7 @@ const SingleSpiritMesh = ({
 }) => {
   const groupRef = useRef<THREE.Group>(null);
   const coreRef = useRef<THREE.Group>(null);
-  const ringRef = useRef<THREE.Mesh>(null);
+  const puddleRef = useRef<THREE.Group>(null);
   const seed = useRef(Math.random() * 10);
   const [isNearPlayer, setIsNearPlayer] = useState(false);
   const nearCheckTimer = useRef(0);
@@ -27,7 +27,6 @@ const SingleSpiritMesh = ({
     if (!groupRef.current || !coreRef.current) return;
     const t = state.clock.elapsedTime + seed.current;
 
-    // 0.25초마다 플레이어와의 거리를 체크하여 가까울 때만 체력바 UI 표시 (렌더링 부하 절감 & 화면 정리)
     nearCheckTimer.current += delta;
     if (nearCheckTimer.current > 0.25) {
       nearCheckTimer.current = 0;
@@ -52,7 +51,7 @@ const SingleSpiritMesh = ({
     groupRef.current.position.lerp(
       new THREE.Vector3(
         curX,
-        groundY + floatHeight + Math.sin(t * 3.5) * 0.12,
+        groundY + floatHeight + Math.sin(t * 3.5) * 0.1,
         curZ
       ),
       10 * delta
@@ -64,14 +63,15 @@ const SingleSpiritMesh = ({
       new THREE.Vector3(targetScale, targetScale, targetScale),
       12 * delta
     );
-    coreRef.current.rotation.y += delta * (spirit.isBoss ? 1.5 : 2.5);
+    coreRef.current.rotation.y += delta * (spirit.isBoss ? 1.5 : 2.2);
 
-    if (ringRef.current) {
-      ringRef.current.rotation.z = -t * 2;
+    if (puddleRef.current) {
+      puddleRef.current.rotation.y = -t * 0.8;
     }
   });
 
   const hpPercent = Math.max(0, Math.min(100, (spirit.hp / spirit.maxHp) * 100));
+  const isBeingPurified = spirit.hp < spirit.maxHp;
 
   return (
     <group
@@ -88,24 +88,70 @@ const SingleSpiritMesh = ({
       onPointerOver={() => (document.body.style.cursor = 'pointer')}
       onPointerOut={() => (document.body.style.cursor = 'auto')}
     >
+      {/* 홍보영상 1·2번째 캡처 반영: 바닥에 깔리는 마젠타/보랏빛 물방울 독기 장판 */}
+      <group
+        ref={puddleRef}
+        position={[0, spirit.isBoss ? -0.82 : -0.38, 0]}
+        scale={spirit.isBoss ? 2.1 : 1.0}
+      >
+        <mesh rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.72, 16]} />
+          <meshBasicMaterial
+            color="#d946ef"
+            transparent
+            opacity={0.45}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        {/* 분홍 물방울 도트 패턴 */}
+        {[0, 1, 2, 3].map((i) => {
+          const a = (i * Math.PI) / 2;
+          return (
+            <mesh
+              key={i}
+              position={[Math.cos(a) * 0.42, 0.01, Math.sin(a) * 0.42]}
+              rotation={[-Math.PI / 2, 0, 0]}
+            >
+              <circleGeometry args={[0.13, 10]} />
+              <meshBasicMaterial color="#f0abfc" side={THREE.DoubleSide} />
+            </mesh>
+          );
+        })}
+      </group>
+
       <group ref={coreRef}>
+        {/* 액운 구름 몸통 */}
         <mesh>
           <dodecahedronGeometry args={[0.45, 1]} />
           <meshStandardMaterial
-            color={spirit.isBoss ? '#090514' : '#1e1b4b'}
-            emissive={spirit.isBoss ? '#991b1b' : '#4c1d95'}
-            emissiveIntensity={spirit.isBoss ? 1.2 : 0.8}
+            color={spirit.isBoss ? '#2e1065' : '#701a75'}
+            emissive={spirit.isBoss ? '#991b1b' : '#a21caf'}
+            emissiveIntensity={spirit.isBoss ? 1.1 : 0.7}
             roughness={0.75}
           />
         </mesh>
         <mesh position={[-0.24, 0.1, 0.12]}>
           <dodecahedronGeometry args={[0.28, 0]} />
-          <meshToonMaterial color={spirit.isBoss ? '#3b0764' : '#311042'} />
+          <meshToonMaterial color={spirit.isBoss ? '#4c1d95' : '#86198f'} />
         </mesh>
         <mesh position={[0.24, -0.08, -0.1]}>
           <dodecahedronGeometry args={[0.26, 0]} />
-          <meshToonMaterial color={spirit.isBoss ? '#3b0764' : '#311042'} />
+          <meshToonMaterial color={spirit.isBoss ? '#4c1d95' : '#86198f'} />
         </mesh>
+
+        {/* 홍보영상 2번째 캡처 반영: 빗자루에 쓸려 정화될 때 피어오르는 민트/초록빛 정화 구름 */}
+        {isBeingPurified && (
+          <>
+            <mesh position={[-0.32, 0.25, 0.2]}>
+              <sphereGeometry args={[0.18, 8, 8]} />
+              <meshBasicMaterial color="#86efac" transparent opacity={0.75} />
+            </mesh>
+            <mesh position={[0.3, -0.15, 0.22]}>
+              <sphereGeometry args={[0.14, 8, 8]} />
+              <meshBasicMaterial color="#6ee7b7" transparent opacity={0.75} />
+            </mesh>
+          </>
+        )}
 
         {spirit.isBoss && (
           <>
@@ -117,33 +163,19 @@ const SingleSpiritMesh = ({
               <coneGeometry args={[0.1, 0.35, 6]} />
               <meshBasicMaterial color="#ef4444" />
             </mesh>
-            <mesh
-              ref={ringRef}
-              position={[0, -0.35, 0]}
-              rotation={[Math.PI / 2, 0, 0]}
-            >
-              <ringGeometry args={[0.55, 0.72, 16]} />
-              <meshBasicMaterial
-                color="#ef4444"
-                side={THREE.DoubleSide}
-                transparent
-                opacity={0.7}
-              />
-            </mesh>
           </>
         )}
 
         <mesh position={[-0.14, 0.08, 0.38]}>
           <sphereGeometry args={[0.065, 8, 8]} />
-          <meshBasicMaterial color={spirit.isBoss ? '#ff1744' : '#facc15'} />
+          <meshBasicMaterial color={spirit.isBoss ? '#ff1744' : '#fef08a'} />
         </mesh>
         <mesh position={[0.14, 0.08, 0.38]}>
           <sphereGeometry args={[0.065, 8, 8]} />
-          <meshBasicMaterial color={spirit.isBoss ? '#ff1744' : '#facc15'} />
+          <meshBasicMaterial color={spirit.isBoss ? '#ff1744' : '#fef08a'} />
         </mesh>
       </group>
 
-      {/* 가까이 다가갔을 때만 표시되는 슬림 프로그레스 체력바 */}
       {!hideLabels && isNearPlayer && (
         <Html
           position={[0, spirit.isBoss ? 1.45 : 0.82, 0]}
@@ -151,14 +183,14 @@ const SingleSpiritMesh = ({
           distanceFactor={15}
           zIndexRange={[10, 0]}
         >
-          <div className="px-2 py-1 bg-stone-950/90 border border-purple-400/50 rounded-xl shadow-md pointer-events-none flex flex-col items-center gap-0.5 min-w-[68px]">
+          <div className="px-2 py-1 bg-stone-950/90 border border-fuchsia-400/50 rounded-xl shadow-md pointer-events-none flex flex-col items-center gap-0.5 min-w-[68px]">
             <div className="text-[9px] font-extrabold text-amber-200 whitespace-nowrap">
               {spirit.isBoss ? '⚡ 대액운' : '👾 액운'} {spirit.hp}/{spirit.maxHp}
             </div>
             <div className="w-14 h-1.5 bg-stone-800 rounded-full overflow-hidden">
               <div
                 className={`h-full transition-all duration-200 ${
-                  spirit.isBoss ? 'bg-red-500' : 'bg-purple-400'
+                  spirit.isBoss ? 'bg-red-500' : 'bg-fuchsia-400'
                 }`}
                 style={{ width: `${hpPercent}%` }}
               />
