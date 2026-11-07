@@ -43,6 +43,15 @@ export type FlowerType =
 
 export type ZoneMode = 'public' | 'my_garden';
 
+// Phase 4: 내 동산 커스텀 조경 아이템 6종 ID
+export type GardenItemId =
+  | 'cherry_tree'
+  | 'campfire'
+  | 'stone_pagoda'
+  | 'wood_bench'
+  | 'lantern_pair'
+  | 'ssari_gate';
+
 export interface RemotePlayer {
   id: string;
   nickname: string;
@@ -77,9 +86,9 @@ export interface MisfortuneSpirit {
   hp: number;
   maxHp: number;
   scale: number;
+  isBoss?: boolean; // Phase 4: 거대 먹구름 대액운 여부
 }
 
-// Phase 3: 내 동산 붉은 팥(赤豆) 텃밭 데이터 구조
 export interface BeanPlot {
   id: number;
   x: number;

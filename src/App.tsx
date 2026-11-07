@@ -12,6 +12,7 @@ import type {
   MisfortuneSpirit,
   WishSealId,
   BeanPlot,
+  GardenItemId,
 } from './types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './utils/terrain';
 import {
@@ -24,6 +25,8 @@ import {
   BLESS_KARMA_COST,
   generateScatteredOrbs,
   generateInitialSpirits,
+  generateBossSpirit,
+  type GardenCatalogItem,
 } from './utils/constants';
 import { useGameProgress } from './hooks/useGameProgress';
 import { useMultiplayer } from './hooks/useMultiplayer';
@@ -59,6 +62,11 @@ export default function App() {
     plantBean,
     boostAllPlots,
     harvestBean,
+    unlockedDecor,
+    placedDecor,
+    setPlacedDecor,
+    unlockAndPlaceDecor,
+    togglePlacedDecor,
   } = useGameProgress();
 
   const [myNickname, setMyNickname] = useState<string>(
@@ -73,10 +81,10 @@ export default function App() {
   );
   const [myAction, setMyAction] = useState<PlayerAction>('idle');
   const [myEmote, setMyEmote] = useState<string | null>(null);
-  // ⭐ 이전 타이머가 새 몸짓을 중간에 끊어버리지 않도록 관리하는 전용 Ref
   const actionTimerRef = useRef<number | null>(null);
 
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isGardenShopOpen, setIsGardenShopOpen] = useState(false);
   const [isJoystickDragging, setIsJoystickDragging] = useState(false);
 
   const [autoWatchAscension, setAutoWatchAscension] = useState<boolean>(() => {
@@ -100,6 +108,12 @@ export default function App() {
   const [spirits, setSpirits] = useState<MisfortuneSpirit[]>(
     initialSpirits.current
   );
+  const purifiedCountRef = useRef(0);
+
+  const placedDecorRef = useRef<GardenItemId[]>(placedDecor);
+  useEffect(() => {
+    placedDecorRef.current = placedDecor;
+  }, [placedDecor]);
 
   const playerPosRef = useRef({
     x: (Math.random() - 0.5) * 4,
@@ -123,7 +137,7 @@ export default function App() {
   >(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(
-    '🌐 광장에서 공덕을 쌓고 🏡 내 동산 텃밭에 붉은 팥을 키워보세요!'
+    '🧹 광장에서 액운을 정화하고 🏡 내 동산 조경 도감으로 정원을 꾸며보세요!'
   );
 
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -145,7 +159,7 @@ export default function App() {
     }
     addKarma(5);
     setBannerMessage(
-      '🌠 별똥별 축제 발동! 동산의 모든 복쓸덩이가 공덕 +5점을 받았습니다!'
+      '🌠 밤하늘에 축복의 별똥별이 쏟아집니다! (모든 복쓸덩이 🔮공덕 +5)'
     );
 
     setTimeout(() => {
@@ -153,7 +167,6 @@ export default function App() {
       const respawned = generateScatteredOrbs();
       orbsRef.current = respawned;
       setCollectedCount(0);
-      setBannerMessage('🔮 동산 곳곳에 새로운 오색 복구슬들이 나타났습니다!');
     }, 10000);
   }, [addKarma, autoWatchAscension]);
 
@@ -179,6 +192,7 @@ export default function App() {
     broadcastAction,
     broadcastOrbs,
     broadcastSpirits,
+    broadcastGardenDecor,
     broadcastWishes,
   } = useMultiplayer({
     roomName: activeRoomName,
@@ -191,10 +205,14 @@ export default function App() {
     orbsRef,
     spiritsRef,
     wishesRef,
+    placedDecorRef,
     setSpirits,
     setCollectedCount,
     onMeteorTriggered: triggerMeteorFestival,
     onRemoteAscension: handleRemoteAscension,
+    onRemoteDecorSync: (incomingDecor) => {
+      setPlacedDecor(incomingDecor);
+    },
     setWishes,
     setBannerMessage,
     setIsNightMode,
@@ -202,12 +220,15 @@ export default function App() {
 
   const selectedWish = wishes.find((w) => w.id === selectedWishId) || null;
   const ascendingWish = wishes.find((w) => w.status === 'ascending') || null;
+  const activeBoss = spirits.find((s) => s.isBoss) || null;
   const isAnyModalOpen =
-    isWriteModalOpen || Boolean(selectedWishId) || isProfileModalOpen;
+    isWriteModalOpen ||
+    Boolean(selectedWishId) ||
+    isProfileModalOpen ||
+    isGardenShopOpen;
   const followingPlayer = followingId ? remotePlayers[followingId] || null : null;
   const remoteList = Object.values(remotePlayers);
 
-  // ⭐ [버그 해결] 이전 타이머를 clearTimeout으로 확실히 지워 표현이 중간에 끊기지 않게 보장
   const handleTriggerAction = useCallback(
     (action: PlayerAction, label: string, bonusKarma = 0) => {
       if (actionTimerRef.current) {
@@ -234,9 +255,9 @@ export default function App() {
     [karma, addKarma, broadcastAction]
   );
 
+  // 싸리빗자루 쓸기 & 거대 대액운(Boss) 스폰/정화 처리
   const handleSweepSpirits = useCallback(
     (targetSpiritId?: string) => {
-      // 내 동산에서 싸리빗자루를 쓸면 팥 텃밭이 정성으로 즉시 익음!
       if (zoneMode === 'my_garden') {
         boostAllPlots();
         handleTriggerAction(
@@ -249,20 +270,23 @@ export default function App() {
 
       const pPos = playerPosRef.current;
       let hitAny = false;
-      let purifiedAny = false;
+      let purifiedNormal = false;
+      let purifiedBoss = false;
 
       const updated = spiritsRef.current
         .map((sp) => {
+          const hitRange = sp.isBoss ? 4.2 : 3.2;
           const dist = Math.hypot(sp.x - pPos.x, sp.z - pPos.z);
-          if (sp.id === targetSpiritId && dist > 3.2) {
+          if (sp.id === targetSpiritId && dist > hitRange) {
             setClickTarget({ x: sp.x, z: sp.z });
             return sp;
           }
-          if (dist <= 3.2 || sp.id === targetSpiritId) {
+          if (dist <= hitRange || sp.id === targetSpiritId) {
             hitAny = true;
             const nextHp = sp.hp - 1;
             if (nextHp <= 0) {
-              purifiedAny = true;
+              if (sp.isBoss) purifiedBoss = true;
+              else purifiedNormal = true;
               return null;
             }
             return { ...sp, hp: nextHp };
@@ -271,16 +295,37 @@ export default function App() {
         })
         .filter(Boolean) as MisfortuneSpirit[];
 
-      if (updated.length < 2) {
-        const extra = generateInitialSpirits()[0];
-        updated.push(extra);
+      // 일반 액운 3마리를 정화할 때마다 거대 먹구름 대액운(Boss) 출현!
+      if (purifiedNormal) {
+        purifiedCountRef.current += 1;
+        if (
+          purifiedCountRef.current % 3 === 0 &&
+          !updated.some((s) => s.isBoss)
+        ) {
+          updated.push(generateBossSpirit());
+          setBannerMessage(
+            '⚡ 당산나무 앞마당에 거대 먹구름 대액운이 출현했습니다! 힘을 합쳐 쓸어내세요!'
+          );
+        }
+      }
+
+      if (updated.filter((s) => !s.isBoss).length < 2) {
+        updated.push(generateInitialSpirits()[0]);
       }
 
       spiritsRef.current = updated;
       setSpirits(updated);
-      broadcastSpirits(updated);
+      broadcastSpirits(updated, purifiedBoss);
 
-      if (purifiedAny) {
+      if (purifiedBoss) {
+        addRedBeans(1);
+        handleTriggerAction(
+          'jump',
+          '🎉 거대 대액운 합동 정화 성공! (🔮+8 · 🫘+1)',
+          8
+        );
+        triggerMeteorFestival();
+      } else if (purifiedNormal) {
         handleTriggerAction('sweep', '🧹 액운 정화 완료! (🔮공덕 +3)', 3);
       } else if (hitAny) {
         handleTriggerAction('sweep', '🧹 쓱싹쓱싹! 액운 쓸어내기!', 1);
@@ -288,42 +333,82 @@ export default function App() {
         handleTriggerAction('sweep', '🧹 싸리빗자루 손질 중!');
       }
     },
-    [zoneMode, boostAllPlots, broadcastSpirits, handleTriggerAction]
+    [
+      zoneMode,
+      boostAllPlots,
+      broadcastSpirits,
+      handleTriggerAction,
+      addRedBeans,
+      triggerMeteorFestival,
+    ]
   );
 
-  // [Phase 3 핵심] 수확한 붉은 팥(🫘)을 뿌려 액운 일격 정화
+  // 붉은 팥(🫘) 뿌리기: 일반 액운은 즉사, 거대 대액운에게는 특효 데미지 3!
   const handleThrowRedBean = useCallback(() => {
     if (redBeans < 1 || spiritsRef.current.length === 0) return;
     addRedBeans(-1);
 
     const pPos = playerPosRef.current;
-    let closestIdx = 0;
-    let minDist = Infinity;
-    spiritsRef.current.forEach((sp, i) => {
-      const d = Math.hypot(sp.x - pPos.x, sp.z - pPos.z);
-      if (d < minDist) {
-        minDist = d;
-        closestIdx = i;
-      }
-    });
+    // 보스가 있으면 보스를 우선 타격, 없으면 가장 가까운 액운 타격
+    let targetIdx = spiritsRef.current.findIndex((s) => s.isBoss);
+    if (targetIdx === -1) {
+      let minDist = Infinity;
+      spiritsRef.current.forEach((sp, i) => {
+        const d = Math.hypot(sp.x - pPos.x, sp.z - pPos.z);
+        if (d < minDist) {
+          minDist = d;
+          targetIdx = i;
+        }
+      });
+    }
 
-    const updated = spiritsRef.current.filter((_, i) => i !== closestIdx);
-    if (updated.length < 2) {
+    let purifiedBoss = false;
+    const updated = spiritsRef.current
+      .map((sp, i) => {
+        if (i !== targetIdx) return sp;
+        if (sp.isBoss) {
+          const nextHp = sp.hp - 3;
+          if (nextHp <= 0) {
+            purifiedBoss = true;
+            return null;
+          }
+          return { ...sp, hp: nextHp };
+        }
+        return null; // 일반 액운은 일격 정화
+      })
+      .filter(Boolean) as MisfortuneSpirit[];
+
+    if (updated.filter((s) => !s.isBoss).length < 2) {
       updated.push(generateInitialSpirits()[0]);
     }
 
     spiritsRef.current = updated;
     setSpirits(updated);
-    broadcastSpirits(updated);
+    broadcastSpirits(updated, purifiedBoss);
 
-    handleTriggerAction(
-      'jump',
-      '🫘 붉은 팥 액막이! 액운 일격 정화! (🔮공덕 +5)',
-      5
-    );
-  }, [redBeans, addRedBeans, broadcastSpirits, handleTriggerAction]);
+    if (purifiedBoss) {
+      addRedBeans(1);
+      handleTriggerAction(
+        'jump',
+        '🫘 붉은 팥으로 거대 대액운 완전 정화! (🔮+8 · 🫘+1)',
+        8
+      );
+      triggerMeteorFestival();
+    } else {
+      handleTriggerAction(
+        'jump',
+        '🫘 붉은 팥 액막이 적중! (🔮공덕 +5)',
+        5
+      );
+    }
+  }, [
+    redBeans,
+    addRedBeans,
+    broadcastSpirits,
+    handleTriggerAction,
+    triggerMeteorFestival,
+  ]);
 
-  // [Phase 3 핵심] 내 동산 팥 텃밭 클릭 상호작용 (심기 / 수확)
   const handleInteractBeanPlot = useCallback(
     (plot: BeanPlot) => {
       if (plot.stage === 'empty') {
@@ -344,11 +429,44 @@ export default function App() {
         );
       } else {
         setBannerMessage(
-          '🌿 팥이 자라는 중입니다! 하단 [🧹쓸기] 버튼을 누르면 즉시 익습니다!'
+          '🌿 팥이 자라는 중입니다! 하단 [🧹쓸기]를 누르면 즉시 익습니다!'
         );
       }
     },
     [karma, addKarma, plantBean, harvestBean, addRedBeans, handleTriggerAction]
+  );
+
+  // [Phase 4 핵심] 내 동산 조경 오브제 교환 및 배치 토글
+  const handleBuyOrToggleDecor = useCallback(
+    (item: GardenCatalogItem) => {
+      if (unlockedDecor.includes(item.id)) {
+        const nextPlaced = placedDecor.includes(item.id)
+          ? placedDecor.filter((id) => id !== item.id)
+          : [...placedDecor, item.id];
+        togglePlacedDecor(item.id);
+        broadcastGardenDecor(nextPlaced);
+      } else {
+        if (karma < item.karmaCost || redBeans < item.beanCost) return;
+        addKarma(-item.karmaCost);
+        addRedBeans(-item.beanCost);
+        unlockAndPlaceDecor(item.id);
+        const nextPlaced = [...placedDecor, item.id];
+        broadcastGardenDecor(nextPlaced);
+        handleTriggerAction('jump', `${item.icon} '${item.name}' 내 동산에 배치 완료!`);
+      }
+    },
+    [
+      unlockedDecor,
+      placedDecor,
+      karma,
+      redBeans,
+      addKarma,
+      addRedBeans,
+      togglePlacedDecor,
+      unlockAndPlaceDecor,
+      broadcastGardenDecor,
+      handleTriggerAction,
+    ]
   );
 
   const handleCopyInviteLink = useCallback(() => {
@@ -378,7 +496,13 @@ export default function App() {
         triggerMeteorFestival();
       }
     },
-    [meteorActive, addKarma, broadcastOrbs, triggerMeteorFestival, handleTriggerAction]
+    [
+      meteorActive,
+      addKarma,
+      broadcastOrbs,
+      triggerMeteorFestival,
+      handleTriggerAction,
+    ]
   );
 
   const handleHighFive = useCallback(
@@ -500,7 +624,7 @@ export default function App() {
     if (!target || target.status !== 'hanging') return;
 
     setSelectedWishId(null);
-    setFocusedTarget(null); // 이전 나뭇가지 포커스를 해제해야 하늘로 시선이 따라감!
+    setFocusedTarget(null);
     setIsNightMode(true);
     setCameraMode('sky');
     setAscendingWishNickname(target.nickname);
@@ -568,7 +692,7 @@ export default function App() {
           setCameraMode('follow');
           setBannerMessage(
             z === 'my_garden'
-              ? '🏡 나만의 작은 동산에 도착했습니다! 텃밭에 붉은 팥을 키워보세요.'
+              ? '🏡 내 동산에 도착했습니다! 팥을 수확하고 [조경 도감]으로 정원을 꾸며보세요.'
               : '🌐 모두의 당산나무 광장에 도착했습니다!'
           );
         }}
@@ -594,6 +718,7 @@ export default function App() {
         isNightMode={isNightMode}
         onToggleNightMode={() => setIsNightMode(!isNightMode)}
         bannerMessage={bannerMessage}
+        activeBoss={activeBoss}
         isAnyModalOpen={isAnyModalOpen}
         isNearTree={isNearTree}
         myAction={myAction}
@@ -613,6 +738,11 @@ export default function App() {
         }}
         isProfileModalOpen={isProfileModalOpen}
         setIsProfileModalOpen={setIsProfileModalOpen}
+        isGardenShopOpen={isGardenShopOpen}
+        setIsGardenShopOpen={setIsGardenShopOpen}
+        unlockedDecor={unlockedDecor}
+        placedDecor={placedDecor}
+        onBuyOrToggleDecor={handleBuyOrToggleDecor}
         myNickname={myNickname}
         setMyNickname={setMyNickname}
         myColor={myColor}
@@ -670,7 +800,6 @@ export default function App() {
 
         <ClickTargetMarker target={clickTarget} />
 
-        {/* [광장 전용] 복바구니 & 액운 먼지령 / [내 동산 전용] 붉은 팥 텃밭 */}
         {zoneMode === 'public' ? (
           <>
             <WishAltarAndOrbs
@@ -692,6 +821,7 @@ export default function App() {
         ) : (
           <PersonalGardenSystem
             plots={beanPlots}
+            placedDecor={placedDecor}
             hideLabels={isAnyModalOpen}
             ownerNickname={myNickname}
             onInteractPlot={handleInteractBeanPlot}

@@ -10,18 +10,24 @@ import {
   Share2,
   Home,
   Globe,
+  Store,
+  X,
 } from 'lucide-react';
 import type {
   CameraMode,
   PlayerAction,
   FlowerType,
   ZoneMode,
+  GardenItemId,
+  MisfortuneSpirit,
 } from '../../types/wish';
 import {
   RANDOM_COLORS,
   FLOWER_NAMES,
   KARMA_THRESHOLDS,
   QUICK_EMOTES,
+  GARDEN_CATALOG,
+  type GardenCatalogItem,
 } from '../../utils/constants';
 import { getGrowthStage } from '../../hooks/useGameProgress';
 import { VirtualJoystick } from './VirtualJoystick';
@@ -42,6 +48,7 @@ interface HudOverlayProps {
   isNightMode: boolean;
   onToggleNightMode: () => void;
   bannerMessage: string | null;
+  activeBoss: MisfortuneSpirit | null;
   isAnyModalOpen: boolean;
   isNearTree: boolean;
   myAction: PlayerAction;
@@ -53,6 +60,11 @@ interface HudOverlayProps {
   onJoystickDragChange: (dragging: boolean) => void;
   isProfileModalOpen: boolean;
   setIsProfileModalOpen: (open: boolean) => void;
+  isGardenShopOpen: boolean;
+  setIsGardenShopOpen: (open: boolean) => void;
+  unlockedDecor: GardenItemId[];
+  placedDecor: GardenItemId[];
+  onBuyOrToggleDecor: (item: GardenCatalogItem) => void;
   myNickname: string;
   setMyNickname: (name: string) => void;
   myColor: string;
@@ -84,6 +96,7 @@ export const HudOverlay = ({
   isNightMode,
   onToggleNightMode,
   bannerMessage,
+  activeBoss,
   isAnyModalOpen,
   isNearTree,
   myAction,
@@ -95,6 +108,11 @@ export const HudOverlay = ({
   onJoystickDragChange,
   isProfileModalOpen,
   setIsProfileModalOpen,
+  isGardenShopOpen,
+  setIsGardenShopOpen,
+  unlockedDecor,
+  placedDecor,
+  onBuyOrToggleDecor,
   myNickname,
   setMyNickname,
   myColor,
@@ -122,7 +140,6 @@ export const HudOverlay = ({
     <>
       {/* --- 상단 바 --- */}
       <header className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
-        {/* 좌측 캡슐: 프로필 & 광장/내동산 전환 */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
           <button
             onClick={() => setIsProfileModalOpen(true)}
@@ -144,7 +161,6 @@ export const HudOverlay = ({
             </span>
           </button>
 
-          {/* [Phase 3 핵심] 광장 ↔ 내 동산 전환 캡슐 */}
           <div className="h-10 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5">
             <button
               onClick={() => onSwitchZone('public')}
@@ -195,7 +211,6 @@ export const HudOverlay = ({
           )}
         </div>
 
-        {/* 우측 시점 캡슐 */}
         <div className="h-10 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5 pointer-events-auto">
           <button
             onClick={() => onSelectCameraMode('follow')}
@@ -245,8 +260,30 @@ export const HudOverlay = ({
         </div>
       </header>
 
+      {/* --- [Phase 4] 거대 대액운 출현 시 상단 협동 레이드 게이지 바 --- */}
+      {zoneMode === 'public' && activeBoss && !isAnyModalOpen && (
+        <div className="absolute top-15 left-4 right-4 z-20 flex justify-center pointer-events-none">
+          <div className="bg-red-950/90 backdrop-blur-md border border-red-400/70 px-4 py-1.5 rounded-2xl shadow-xl flex items-center gap-3 w-full max-w-xs">
+            <span className="text-xs font-black text-amber-200 whitespace-nowrap">
+              ⚡ 대액운 출현!
+            </span>
+            <div className="flex-1 h-2.5 bg-stone-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-red-500 to-amber-400 transition-all duration-300"
+                style={{
+                  width: `${(activeBoss.hp / activeBoss.maxHp) * 100}%`,
+                }}
+              />
+            </div>
+            <span className="text-[11px] font-black text-red-200 whitespace-nowrap">
+              {activeBoss.hp}/{activeBoss.maxHp}
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* --- 자동 숨김 토스트 배너 --- */}
-      {bannerMessage && !isAnyModalOpen && (
+      {bannerMessage && !isAnyModalOpen && !activeBoss && (
         <div className="absolute top-15 left-4 right-4 z-20 flex justify-center pointer-events-none">
           <div className="bg-stone-900/85 backdrop-blur-md text-amber-200 px-4 py-1.5 rounded-full font-bold text-[11px] shadow-xl border border-amber-400/30 flex items-center gap-1.5 max-w-sm truncate">
             <SparkleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -346,22 +383,32 @@ export const HudOverlay = ({
           )}
 
           <div className="flex items-center gap-1.5">
-            {/* 광장에서 수확한 붉은 팥으로 액운 일격 정화 버튼 */}
-            {zoneMode === 'public' && myRedBeans > 0 && (
+            {/* 광장: 붉은 팥 투척 버튼 / 내 동산: 조경 도감(교환소) 버튼 */}
+            {zoneMode === 'public' ? (
+              myRedBeans > 0 && (
+                <button
+                  onClick={onThrowRedBean}
+                  className="h-11 px-3 rounded-full bg-red-900 hover:bg-red-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-400/60 flex items-center gap-1 transition transform active:scale-95"
+                  title="붉은 팥 1알을 뿌려 액운을 강력하게 정화합니다"
+                >
+                  <span>🫘</span>
+                  <span className="hidden sm:inline">팥 뿌리기</span>
+                </button>
+              )
+            ) : (
               <button
-                onClick={onThrowRedBean}
-                className="h-11 px-3 rounded-full bg-red-900 hover:bg-red-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-400/60 flex items-center gap-1 transition transform active:scale-95"
-                title="붉은 팥 1알을 뿌려 액운을 단번에 정화합니다"
+                onClick={() => setIsGardenShopOpen(true)}
+                className="h-11 px-3.5 rounded-full bg-amber-900 hover:bg-amber-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-300/60 flex items-center gap-1 transition transform active:scale-95"
+                title="모은 공덕과 팥으로 내 동산 꾸미기"
               >
-                <span>🫘</span>
-                <span className="hidden sm:inline">팥 뿌리기</span>
+                <Store className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+                <span>조경 도감</span>
               </button>
             )}
 
             <button
               onClick={onSweepAction}
               className="h-11 px-3.5 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs shadow-xl border-2 border-white flex items-center gap-1 transition transform active:scale-95"
-              title="싸리빗자루로 액운 쓸기 / 팥밭 돌보기"
             >
               <span>🧹</span>
               <span>쓸기</span>
@@ -389,6 +436,105 @@ export const HudOverlay = ({
           </div>
         </div>
       </div>
+
+      {/* --- [Phase 4 핵심] 내 동산 조경 도감 (공덕·팥 교환소) 모달 --- */}
+      {isGardenShopOpen && (
+        <div
+          onClick={() => setIsGardenShopOpen(false)}
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-[#fbf6e9] w-full max-w-[400px] max-h-[85dvh] overflow-y-auto rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-4"
+          >
+            <div className="flex items-center justify-between border-b border-amber-900/15 pb-3">
+              <div>
+                <span className="text-[10px] font-extrabold text-lime-900 bg-lime-200 px-2 py-0.5 rounded-full">
+                  🏡 내 동산 꾸미기 · 공덕 교환소
+                </span>
+                <h3 className="text-base font-extrabold text-stone-900 mt-0.5">
+                  전통 조경 오브제 도감
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsGardenShopOpen(false)}
+                className="p-1.5 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-700"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between bg-amber-100/80 px-3.5 py-2 rounded-2xl border border-amber-900/15 text-xs font-extrabold text-amber-950">
+              <span>내 보유 재화</span>
+              <span className="flex items-center gap-2">
+                <span>🔮 공덕 {myKarma}점</span>
+                <span>·</span>
+                <span>🫘 붉은 팥 {myRedBeans}알</span>
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {GARDEN_CATALOG.map((item) => {
+                const isUnlocked = unlockedDecor.includes(item.id);
+                const isPlaced = placedDecor.includes(item.id);
+                const canAfford =
+                  myKarma >= item.karmaCost && myRedBeans >= item.beanCost;
+
+                return (
+                  <div
+                    key={item.id}
+                    className={`p-3 rounded-2xl border-2 flex items-center justify-between gap-3 transition ${
+                      isPlaced
+                        ? 'bg-lime-50/90 border-lime-700'
+                        : 'bg-white/90 border-stone-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                        {item.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-extrabold text-stone-900 truncate">
+                          {item.name}
+                        </div>
+                        <p className="text-[10px] text-stone-600 line-clamp-2">
+                          {item.desc}
+                        </p>
+                        {!isUnlocked && (
+                          <div className="text-[10px] font-extrabold text-amber-900 mt-0.5">
+                            필요: 🔮{item.karmaCost} · 🫘{item.beanCost}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={!isUnlocked && !canAfford}
+                      onClick={() => onBuyOrToggleDecor(item)}
+                      className={`px-3 py-2 rounded-xl text-[11px] font-extrabold whitespace-nowrap shrink-0 shadow transition ${
+                        isUnlocked
+                          ? isPlaced
+                            ? 'bg-lime-800 text-white'
+                            : 'bg-stone-200 text-stone-800 hover:bg-stone-300'
+                          : canAfford
+                          ? 'bg-red-800 hover:bg-red-700 text-amber-50'
+                          : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                      }`}
+                    >
+                      {isUnlocked
+                        ? isPlaced
+                          ? '✓ 배치됨'
+                          : '배치하기'
+                        : '교환하기'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* --- 프로필 & 환경 설정 모달 --- */}
       {isProfileModalOpen && (

@@ -8,6 +8,7 @@ import type {
   PlayerAction,
   FlowerType,
   MisfortuneSpirit,
+  GardenItemId,
 } from '../types/wish';
 
 interface UseMultiplayerProps {
@@ -21,10 +22,12 @@ interface UseMultiplayerProps {
   orbsRef: React.MutableRefObject<RollingOrb[]>;
   spiritsRef: React.MutableRefObject<MisfortuneSpirit[]>;
   wishesRef: React.MutableRefObject<Wish[]>;
+  placedDecorRef: React.MutableRefObject<GardenItemId[]>;
   setSpirits: React.Dispatch<React.SetStateAction<MisfortuneSpirit[]>>;
   setCollectedCount: (count: number) => void;
   onMeteorTriggered: () => void;
   onRemoteAscension?: (nickname: string) => void;
+  onRemoteDecorSync?: (decor: GardenItemId[]) => void;
   setWishes: React.Dispatch<React.SetStateAction<Wish[]>>;
   setBannerMessage: (msg: string | null) => void;
   setIsNightMode: (night: boolean) => void;
@@ -41,10 +44,12 @@ export const useMultiplayer = ({
   orbsRef,
   spiritsRef,
   wishesRef,
+  placedDecorRef,
   setSpirits,
   setCollectedCount,
   onMeteorTriggered,
   onRemoteAscension,
+  onRemoteDecorSync,
   setWishes,
   setBannerMessage,
   setIsNightMode,
@@ -63,7 +68,6 @@ export const useMultiplayer = ({
     isMoving: false,
   });
 
-  // 최신 상태를 Ref로 유지하여 공덕/액션 변경 시 채널이 재연결(끊김)되는 현상 방지!
   const latestProfileRef = useRef({
     nickname: myNickname,
     color: myColor,
@@ -132,6 +136,7 @@ export const useMultiplayer = ({
           orbs: orbsRef.current,
           spirits: spiritsRef.current,
           wishes: wishesRef.current,
+          placedDecor: placedDecorRef.current,
         },
       });
     });
@@ -154,6 +159,9 @@ export const useMultiplayer = ({
           isMine: false,
         }));
         setWishes(synced);
+      }
+      if (payload.placedDecor && onRemoteDecorSync) {
+        onRemoteDecorSync(payload.placedDecor);
       }
     });
 
@@ -209,6 +217,14 @@ export const useMultiplayer = ({
       if (!payload || !payload.spirits) return;
       spiritsRef.current = payload.spirits;
       setSpirits(payload.spirits);
+      if (payload.bossDefeated) {
+        onMeteorTriggered();
+      }
+    });
+
+    channel.on('broadcast', { event: 'garden-decor-sync' }, ({ payload }) => {
+      if (!payload || !payload.placedDecor || !onRemoteDecorSync) return;
+      onRemoteDecorSync(payload.placedDecor);
     });
 
     channel.on('broadcast', { event: 'wish-sync' }, ({ payload }) => {
@@ -256,10 +272,12 @@ export const useMultiplayer = ({
     orbsRef,
     spiritsRef,
     wishesRef,
+    placedDecorRef,
     setSpirits,
     setCollectedCount,
     onMeteorTriggered,
     onRemoteAscension,
+    onRemoteDecorSync,
     setWishes,
     setBannerMessage,
     setIsNightMode,
@@ -331,12 +349,24 @@ export const useMultiplayer = ({
     []
   );
 
-  const broadcastSpirits = useCallback((spirits: MisfortuneSpirit[]) => {
+  const broadcastSpirits = useCallback(
+    (spirits: MisfortuneSpirit[], bossDefeated = false) => {
+      if (!channelRef.current) return;
+      channelRef.current.send({
+        type: 'broadcast',
+        event: 'spirit-sync',
+        payload: { spirits, bossDefeated },
+      });
+    },
+    []
+  );
+
+  const broadcastGardenDecor = useCallback((placedDecor: GardenItemId[]) => {
     if (!channelRef.current) return;
     channelRef.current.send({
       type: 'broadcast',
-      event: 'spirit-sync',
-      payload: { spirits },
+      event: 'garden-decor-sync',
+      payload: { placedDecor },
     });
   }, []);
 
@@ -369,6 +399,7 @@ export const useMultiplayer = ({
     broadcastAction,
     broadcastOrbs,
     broadcastSpirits,
+    broadcastGardenDecor,
     broadcastWishes,
   };
 };

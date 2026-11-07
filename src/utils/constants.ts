@@ -4,17 +4,16 @@ import type {
   MisfortuneSpirit,
   FlowerType,
   WishSealId,
+  GardenItemId,
 } from '../types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './terrain';
 
-export const TARGET_BLESSINGS = 5; // 5번의 공덕 응원이 모이면 별 승천 개방
+export const TARGET_BLESSINGS = 5;
 
-// 소원 걸기 및 응원 공덕(🔮) 밸런스
-export const WISH_KARMA_COST = 15;       // 일반 소원 걸기 필요 공덕 (약 5분 플레이)
-export const WISH_BEAN_KARMA_COST = 10;  // 붉은 팥(🫘 1알) 사용 시 할인 공덕 + 기본 기운 +2 부여
-export const BLESS_KARMA_COST = 2;       // 타인 소원에 불어넣는 공덕
+export const WISH_KARMA_COST = 15;
+export const WISH_BEAN_KARMA_COST = 10;
+export const BLESS_KARMA_COST = 2;
 
-// 6대 무언(Zero-Text) 전통 기원 문양
 export interface WishSealInfo {
   id: WishSealId;
   icon: string;
@@ -75,7 +74,74 @@ export const WISH_SEALS: WishSealInfo[] = [
   },
 ];
 
-// 텍스트 없이 소통하는 8종 감정표현 이모티콘
+// Phase 4: 내 동산 조경 커스텀 카탈로그 (공덕 + 붉은 팥 교환소)
+export interface GardenCatalogItem {
+  id: GardenItemId;
+  name: string;
+  icon: string;
+  desc: string;
+  karmaCost: number;
+  beanCost: number;
+  pos: [number, number];
+}
+
+export const GARDEN_CATALOG: GardenCatalogItem[] = [
+  {
+    id: 'campfire',
+    name: '따뜻한 모닥불 화로',
+    icon: '🔥',
+    desc: '타오르는 불꽃과 통나무 쉼터로 동산을 아늑하게 데워줍니다',
+    karmaCost: 10,
+    beanCost: 1,
+    pos: [0, 10.2],
+  },
+  {
+    id: 'cherry_tree',
+    name: '천년 겹벚꽃 나무',
+    icon: '🌸',
+    desc: '화사한 분홍 꽃비가 흩날리는 영험한 벚꽃나무입니다',
+    karmaCost: 15,
+    beanCost: 2,
+    pos: [-6.5, 7.2],
+  },
+  {
+    id: 'stone_pagoda',
+    name: '오층 황금 소원석탑',
+    icon: '🪨',
+    desc: '꼭대기에 황금 보주가 회전하며 동산의 복기운을 모아줍니다',
+    karmaCost: 15,
+    beanCost: 2,
+    pos: [6.5, 7.2],
+  },
+  {
+    id: 'wood_bench',
+    name: '풍류 대청 평상',
+    icon: '🪵',
+    desc: '친구들과 올라가 다과를 즐기며 식빵을 굽기 좋은 넓은 평상입니다',
+    karmaCost: 12,
+    beanCost: 1,
+    pos: [-5.2, 11.2],
+  },
+  {
+    id: 'lantern_pair',
+    name: '청사초롱 쌍등',
+    icon: '🏮',
+    desc: '전통 청홍 비단 등불이 동산의 밤길을 환하게 밝혀줍니다',
+    karmaCost: 12,
+    beanCost: 1,
+    pos: [5.2, 11.2],
+  },
+  {
+    id: 'ssari_gate',
+    name: '액막이 황금 싸리문',
+    icon: '🎐',
+    desc: '금줄과 싸리나무로 엮어 사악한 기운을 막아주는 전통 대문입니다',
+    karmaCost: 20,
+    beanCost: 3,
+    pos: [0, 14.2],
+  },
+];
+
 export const QUICK_EMOTES = [
   { icon: '👋', label: '👋 반가워개!' },
   { icon: '❤️', label: '❤️ 복 받으시개!' },
@@ -175,8 +241,24 @@ export const generateInitialSpirits = (): MisfortuneSpirit[] => {
       hp: 3,
       maxHp: 3,
       scale: 0.9 + Math.random() * 0.35,
+      isBoss: false,
     };
   });
+};
+
+// Phase 4: 당산나무 앞마당을 위협하는 거대 먹구름 대액운(Boss) 생성
+export const generateBossSpirit = (): MisfortuneSpirit => {
+  const angle = (Math.random() - 0.5) * 1.4;
+  const radius = 9.0 + Math.random() * 3.0;
+  return {
+    id: `boss_${Date.now()}`,
+    x: Number((Math.sin(angle) * radius).toFixed(2)),
+    z: Number((Math.cos(angle) * radius).toFixed(2)),
+    hp: 10,
+    maxHp: 10,
+    scale: 2.2,
+    isBoss: true,
+  };
 };
 
 export const INITIAL_WISHES: Wish[] = [

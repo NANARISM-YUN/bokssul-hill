@@ -1,5 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { FlowerType, ZoneMode, BeanPlot } from '../types/wish';
+import type {
+  FlowerType,
+  ZoneMode,
+  BeanPlot,
+  GardenItemId,
+} from '../types/wish';
 import { FLOWER_TYPES, KARMA_THRESHOLDS } from '../utils/constants';
 
 export const getGrowthStage = (karma: number): 0 | 1 | 2 | 3 => {
@@ -11,12 +16,11 @@ export const getGrowthStage = (karma: number): 0 | 1 | 2 | 3 => {
 
 const INITIAL_BEAN_PLOTS: BeanPlot[] = [
   { id: 1, x: -3.2, z: 6.4, stage: 'empty', plantedAt: null },
-  { id: 2, x: 0.0, z: 6.8, stage: 'ready', plantedAt: Date.now() - 30000 }, // 첫 방문 시 바로 수확해볼 수 있는 익은 팥 1포기 제공
+  { id: 2, x: 0.0, z: 6.8, stage: 'ready', plantedAt: Date.now() - 30000 },
   { id: 3, x: 3.2, z: 6.4, stage: 'empty', plantedAt: null },
 ];
 
 export const useGameProgress = () => {
-  // 내 고유 동산 주소 ID (영구 유지)
   const [myGardenId] = useState<string>(() => {
     const saved = localStorage.getItem('bokssul_garden_id');
     if (saved) return saved;
@@ -25,7 +29,6 @@ export const useGameProgress = () => {
     return created;
   });
 
-  // 초대 링크(?garden=xxx)로 접속했는지 확인
   const [visitingGardenId, setVisitingGardenId] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('garden');
@@ -38,7 +41,7 @@ export const useGameProgress = () => {
 
   const [karma, setKarma] = useState<number>(() => {
     const saved = localStorage.getItem('bokssul_karma');
-    return saved ? parseInt(saved, 10) : 15; // 첫 소원/팥심기 체험용 기본 공덕 15점
+    return saved ? parseInt(saved, 10) : 20;
   });
 
   const [redBeans, setRedBeans] = useState<number>(() => {
@@ -67,14 +70,42 @@ export const useGameProgress = () => {
     return INITIAL_BEAN_PLOTS;
   });
 
-  // 팥 텃밭 실시간 성장 타이머 (심은 후 10초 뒤 줄기 ➔ 20초 뒤 붉은 팥 열매 완성)
+  // Phase 4: 해금한 내 동산 조경 아이템 및 현재 배치된 아이템 목록
+  const [unlockedDecor, setUnlockedDecor] = useState<GardenItemId[]>(() => {
+    const saved = localStorage.getItem('bokssul_unlocked_decor');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
+  const [placedDecor, setPlacedDecor] = useState<GardenItemId[]>(() => {
+    const saved = localStorage.getItem('bokssul_placed_decor');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = Date.now();
       setBeanPlots((prev) => {
         let changed = false;
         const next = prev.map((plot) => {
-          if (!plot.plantedAt || plot.stage === 'empty' || plot.stage === 'ready') {
+          if (
+            !plot.plantedAt ||
+            plot.stage === 'empty' ||
+            plot.stage === 'ready'
+          ) {
             return plot;
           }
           const elapsed = now - plot.plantedAt;
@@ -113,7 +144,6 @@ export const useGameProgress = () => {
     });
   }, []);
 
-  // 텃밭에 팥 심기 (🔮 공덕 5점 투자)
   const plantBean = useCallback((plotId: number) => {
     setBeanPlots((prev) => {
       const next = prev.map((p) =>
@@ -126,7 +156,6 @@ export const useGameProgress = () => {
     });
   }, []);
 
-  // 싸리빗자루로 텃밭을 쓸어주면 정성으로 즉시 성장!
   const boostAllPlots = useCallback(() => {
     setBeanPlots((prev) => {
       const next = prev.map((p) =>
@@ -139,13 +168,41 @@ export const useGameProgress = () => {
     });
   }, []);
 
-  // 다 자란 붉은 팥 수확하기
   const harvestBean = useCallback((plotId: number) => {
     setBeanPlots((prev) => {
       const next = prev.map((p) =>
         p.id === plotId ? { ...p, stage: 'empty' as const, plantedAt: null } : p
       );
       localStorage.setItem('bokssul_bean_plots', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  // Phase 4: 조경 아이템 해금 및 배치 토글
+  const unlockAndPlaceDecor = useCallback(
+    (itemId: GardenItemId) => {
+      setUnlockedDecor((prev) => {
+        if (prev.includes(itemId)) return prev;
+        const next = [...prev, itemId];
+        localStorage.setItem('bokssul_unlocked_decor', JSON.stringify(next));
+        return next;
+      });
+      setPlacedDecor((prev) => {
+        if (prev.includes(itemId)) return prev;
+        const next = [...prev, itemId];
+        localStorage.setItem('bokssul_placed_decor', JSON.stringify(next));
+        return next;
+      });
+    },
+    []
+  );
+
+  const togglePlacedDecor = useCallback((itemId: GardenItemId) => {
+    setPlacedDecor((prev) => {
+      const next = prev.includes(itemId)
+        ? prev.filter((id) => id !== itemId)
+        : [...prev, itemId];
+      localStorage.setItem('bokssul_placed_decor', JSON.stringify(next));
       return next;
     });
   }, []);
@@ -165,7 +222,6 @@ export const useGameProgress = () => {
     [myGardenId, visitingGardenId]
   );
 
-  // 현재 접속할 실시간 채널 이름 (광장 vs 개인 동산 분리)
   const activeRoomName =
     zoneMode === 'public'
       ? 'bokssul-hill-room'
@@ -187,5 +243,10 @@ export const useGameProgress = () => {
     plantBean,
     boostAllPlots,
     harvestBean,
+    unlockedDecor,
+    placedDecor,
+    setPlacedDecor,
+    unlockAndPlaceDecor,
+    togglePlacedDecor,
   };
 };
