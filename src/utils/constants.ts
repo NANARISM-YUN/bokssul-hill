@@ -8,17 +8,20 @@ import type {
 } from '../types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './terrain';
 
-export const TARGET_BLESSINGS = 10; // 10번의 응원이 모여야 별 승천 개방
+export const MAX_KARMA = 10;     // 👈 최대 공덕 보유 한도 (인플레이션 원천 방지)
+export const MAX_RED_BEANS = 10; // 👈 최대 붉은 팥 보유 한도
 
-export const WISH_KARMA_COST = 50;      // 기원 인장 올리기 50공덕
-export const WISH_BEAN_KARMA_COST = 35; // 붉은 팥 1알 사용 시 35공덕 + 초기 기운 +3
-export const BLESS_KARMA_COST = 5;      // 이웃 소원 응원 시 5공덕 소모 (보시 보너스 +7 반환)
+export const TARGET_BLESSINGS = 5;
 
-// 5~10분 몰입형 보상화 개화 단계
+export const WISH_KARMA_COST = 5;       // 일반 기원 인장 올리기: 5공덕
+export const WISH_BEAN_KARMA_COST = 3;  // 붉은 팥 1알 함께 사용 시: 3공덕
+export const BLESS_KARMA_COST = 1;      // 이웃 소원 응원: 1공덕 소모
+
+// 1공덕의 가치를 높인 일일 보상화 개화 단계 (최대 한도 10점 달성 시 만개!)
 export const KARMA_THRESHOLDS = {
-  SPROUT: 25, // 1단계: 새싹
-  BUD: 60,    // 2단계: 꽃봉오리
-  BLOOM: 100, // 3단계: 오늘의 보상화 만개 & 운세 부적 해금!
+  SPROUT: 3, // 1단계: 새싹 (3공덕)
+  BUD: 6,    // 2단계: 꽃봉오리 (6공덕)
+  BLOOM: 10, // 3단계: 만개 & 오늘의 스크래치 운세 해금! (10공덕)
 };
 
 export const FLOWER_TYPES: FlowerType[] = [
@@ -112,19 +115,19 @@ export const O2O_REWARD_CODES: Record<
 > = {
   황리단길: {
     title: '🏮 황리단길 복쓸싸리 성지 방문 인증',
-    karma: 100,
+    karma: 10,
     beans: 5,
     badge: '👑 성지순례 금관',
   },
   팥키링: {
     title: '🫘 경주 붉은팥 액막이 키링 소장 인증',
-    karma: 100,
+    karma: 10,
     beans: 8,
     badge: '🧿 액막이 수호자',
   },
   복쓸싸리: {
     title: '🐾 복쓸싸리 스페셜 프렌즈 기프트',
-    karma: 100,
+    karma: 10,
     beans: 5,
     badge: '✨ 복쓸 프렌즈',
   },

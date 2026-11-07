@@ -6,6 +6,21 @@
     <title>복쓸싸리 동산</title>
     <!-- 화면 레이아웃과 3D 캔버스 크기를 잡아주는 필수 스크립트 -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+    html, body, #root {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100dvh;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      overscroll-behavior: none;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+  </style>
   </head>
   <body class="m-0 p-0 overflow-hidden">
     <div id="root"></div>

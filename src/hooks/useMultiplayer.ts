@@ -31,6 +31,7 @@ interface UseMultiplayerProps {
   setWishes: React.Dispatch<React.SetStateAction<Wish[]>>;
   setBannerMessage: (msg: string | null) => void;
   setIsNightMode: (night: boolean) => void;
+  onSpiritReward?: (contributors: string[], reward: number, isBoss: boolean) => void;
 }
 
 export const useMultiplayer = ({
@@ -213,10 +214,17 @@ export const useMultiplayer = ({
       }
     });
 
-    channel.on('broadcast', { event: 'spirit-sync' }, ({ payload }) => {
+channel.on('broadcast', { event: 'spirit-sync' }, ({ payload }) => {
       if (!payload || !payload.spirits) return;
       spiritsRef.current = payload.spirits;
       setSpirits(payload.spirits);
+      if (payload.rewardContributors && onSpiritReward) {
+        onSpiritReward(
+          payload.rewardContributors,
+          payload.rewardAmount || 1,
+          Boolean(payload.bossDefeated)
+        );
+      }
       if (payload.bossDefeated) {
         onMeteorTriggered();
       }
@@ -349,13 +357,23 @@ export const useMultiplayer = ({
     []
   );
 
-  const broadcastSpirits = useCallback(
-    (spirits: MisfortuneSpirit[], bossDefeated = false) => {
+const broadcastSpirits = useCallback(
+    (
+      spirits: MisfortuneSpirit[],
+      bossDefeated = false,
+      rewardContributors?: string[],
+      rewardAmount?: number
+    ) => {
       if (!channelRef.current) return;
       channelRef.current.send({
         type: 'broadcast',
         event: 'spirit-sync',
-        payload: { spirits, bossDefeated },
+        payload: {
+          spirits,
+          bossDefeated,
+          rewardContributors,
+          rewardAmount,
+        },
       });
     },
     []

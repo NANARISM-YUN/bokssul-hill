@@ -95,6 +95,7 @@ export interface MisfortuneSpirit {
   maxHp: number;
   scale: number;
   isBoss?: boolean;
+  contributors?: string[]; // 👈 [추가] 이 액운을 함께 때린 유저 ID 목록
 }
 
 export interface BeanPlot {

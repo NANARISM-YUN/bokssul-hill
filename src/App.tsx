@@ -247,6 +247,16 @@ export default function App() {
     setWishes,
     setBannerMessage,
     setIsNightMode,
+    onSpiritReward: (contributors, reward, isBoss) => {
+      if (contributors.includes(myId)) {
+        if (isBoss) addRedBeans(1);
+        handleTriggerAction(
+          'jump',
+          `🤝 협동 정화 성공! 참여 보상 (🔮공덕 +${reward})`,
+          reward
+        );
+      }
+    },
   });
 
   const selectedWish = wishes.find((w) => w.id === selectedWishId) || null;
@@ -305,15 +315,12 @@ export default function App() {
         boostAllPlots();
         handleTriggerAction(
           'sweep',
-          '🧹 정성껏 텃밭을 쓸어 성장 시간을 단축했습니다! (🔮+1)',
-          1
+          '🧹 정성껏 텃밭을 쓸어 성장 시간을 단축했습니다!'
         );
         return;
       }
 
       const pPos = playerPosRef.current;
-
-      // 타겟 액운 선정 (클릭한 액운 우선, 없으면 가장 가까운 액운 자동 록온!)
       let targetSp = spiritsRef.current.find((s) => s.id === targetSpiritId);
       if (!targetSp && spiritsRef.current.length > 0) {
         let minDist = Infinity;
@@ -331,7 +338,6 @@ export default function App() {
       const hitRange = targetSp.isBoss ? 5.2 : 3.6;
       const dist = Math.hypot(targetSp.x - pPos.x, targetSp.z - pPos.z);
 
-      // 사거리 밖에 있으면 해당 액운에게 자동으로 달려가도록 록온 이동!
       if (dist > hitRange) {
         setClickTarget({ x: targetSp.x, z: targetSp.z });
         handleTriggerAction('sweep', '🏃 액운을 향해 달려갑니다!');
@@ -345,19 +351,24 @@ export default function App() {
 
       let purifiedNormalPos: { x: number; z: number } | null = null;
       let purifiedBoss = false;
-      const dmg = useBeanPower ? 15 : 1; // 팥 액막이는 보스에게 15 데미지 폭격!
+      let rewardContributors: string[] = [];
+      const dmg = useBeanPower ? 15 : 1;
 
       const updated = spiritsRef.current
         .map((sp) => {
           if (sp.id !== targetSp!.id) return sp;
+          const nextContributors = Array.from(
+            new Set([...(sp.contributors || []), myId])
+          );
           const nextHp = sp.hp - dmg;
+
           if (nextHp <= 0) {
+            rewardContributors = nextContributors;
             if (sp.isBoss) purifiedBoss = true;
             else purifiedNormalPos = { x: sp.x, z: sp.z };
             return null;
           }
 
-          // 액운이 5번 맞을 때마다 옆으로 살짝 도망치는 회피 기동 + 내 캐릭터도 따라붙음!
           let nx = sp.x;
           let nz = sp.z;
           if (!sp.isBoss && nextHp % 5 === 0) {
@@ -371,7 +382,13 @@ export default function App() {
             setClickTarget({ x: nx, z: nz });
           }
 
-          return { ...sp, x: nx, z: nz, hp: nextHp };
+          return {
+            ...sp,
+            x: nx,
+            z: nz,
+            hp: nextHp,
+            contributors: nextContributors,
+          };
         })
         .filter(Boolean) as MisfortuneSpirit[];
 
@@ -403,7 +420,7 @@ export default function App() {
         ) {
           updated.push(generateBossSpirit());
           setBannerMessage(
-            '⚡ 거대 먹구름 대액운(HP 150) 출현! 힘을 합쳐 쓸거나 [🫘팥액막이]로 물리치세요!'
+            '⚡ 거대 대액운(HP 150) 출현! 함께 쓸어내면 참여자 전원 공덕 +3!'
           );
         }
       }
@@ -412,37 +429,49 @@ export default function App() {
         updated.push(generateInitialSpirits()[0]);
       }
 
+      const rewardAmount = purifiedBoss ? 3 : 1;
       spiritsRef.current = updated;
       setSpirits(updated);
-      broadcastSpirits(updated, purifiedBoss);
+      broadcastSpirits(
+        updated,
+        purifiedBoss,
+        rewardContributors.length > 0 ? rewardContributors : undefined,
+        rewardAmount
+      );
 
+      // ⭐ 때리는 과정에서는 공덕 0점, 완전히 없앴을 때만 +1점(보스는 +3점) 지급!
       if (purifiedBoss) {
-        addRedBeans(2);
+        addRedBeans(1);
         handleTriggerAction(
           'jump',
-          '🎉 거대 대액운(HP 150) 완전 정화! (🔮+25 · 🫘+2)',
-          25
+          karma >= 10
+            ? '🎉 대액운 정화! (🔮공덕 MAX 상태 - 소원이나 팥밭에 써보세요!)'
+            : '🎉 거대 대액운 정화 완료! (🔮공덕 +3 · 🫘팥 +1)',
+          3
         );
         triggerMeteorFestival();
       } else if (purifiedNormalPos) {
         handleTriggerAction(
           'sweep',
-          '🧹 액운 정화 완료! ✨복구슬이 솟아났습니다! (🔮+10)',
-          10
+          karma >= 10
+            ? '🧹 정화 완료! ✨복구슬 출현! (🔮공덕 10/10 MAX)'
+            : '🧹 액운 정화 완료! ✨복구슬 출현! (🔮공덕 +1)',
+          1
         );
       } else {
         handleTriggerAction(
           'sweep',
           useBeanPower
-            ? `🫘 붉은 팥 액막이 폭격! (-15 HP,🔮+3)`
-            : `🧹 쓱싹! 액운 정화 중! (🔮+1)`,
-          useBeanPower ? 3 : 1
+            ? `🫘 붉은 팥 액막이 강타! (-15 HP)`
+            : `🧹 쓱싹쓱싹! (남은 HP: ${Math.max(1, targetSp.hp - dmg)})`,
+          0
         );
       }
     },
     [
       zoneMode,
       redBeans,
+      karma,
       myId,
       addRedBeans,
       boostAllPlots,

@@ -27,8 +27,8 @@ import type {
 } from '../../types/wish';
 import {
   RANDOM_COLORS,
-  FLOWER_NAMES,
   KARMA_THRESHOLDS,
+  MAX_KARMA,
   QUICK_EMOTES,
   GARDEN_CATALOG,
   type GardenCatalogItem,
@@ -122,7 +122,6 @@ export const HudOverlay = ({
   setMyColor,
   myKarma,
   myRedBeans,
-  myFlowerType,
   autoWatchAscension,
   setAutoWatchAscension,
   ascendingWishNickname,
@@ -133,7 +132,7 @@ export const HudOverlay = ({
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const stage = getGrowthStage(myKarma);
   const isBloomed = stage === 3;
-  const stageLabels = ['🌰 씨앗', '🌱 새싹', '🌷 봉오리', '🪷 오늘 만개!'];
+  const isKarmaMax = myKarma >= MAX_KARMA;
 
   const handleActionClick = (action: PlayerAction, label: string) => {
     setIsActionMenuOpen(false);
@@ -149,63 +148,61 @@ export const HudOverlay = ({
 
   return (
     <>
-      {/* --- 상단 1줄 고정 헤더 (홍보영상 시그니처 브랜드 로고 반영) --- */}
-      <header className="absolute top-3 left-2.5 right-2.5 z-20 flex items-center justify-between gap-1 pointer-events-none whitespace-nowrap">
-        {/* 좌측: 홍보영상 엔딩 로고 스타일 [복쓸싸리] + 재화 & 설정 캡슐 */}
+      {/* --- 상단 바: 모바일 화면 폭 100% 안에 안정적으로 들어오는 콤팩트 레이아웃 --- */}
+      <header className="absolute top-2.5 inset-x-2 z-20 flex items-center justify-between gap-1 pointer-events-none">
+        {/* 좌측: 브랜드 로고 + 공덕(최대 10점 한도 표시) + 설정 아이콘 */}
         <button
           onClick={() => setIsProfileModalOpen(true)}
-          className="h-9 bg-[#fef9c3]/95 hover:bg-[#fef08a] backdrop-blur-md pl-2 pr-2.5 rounded-full shadow-lg border-2 border-[#ff5722]/30 flex items-center gap-1.5 pointer-events-auto transition active:scale-95 shrink-0"
-          title="내 복쓸덩이 정보 및 설정 열기"
+          className="h-9 bg-[#fef9c3]/95 backdrop-blur-md px-2.5 rounded-full shadow-md border border-[#ff5722]/30 flex items-center gap-1.5 pointer-events-auto active:scale-95 shrink-0"
         >
-          {/* 다홍빛 시그니처 로고 */}
-          <span className="font-serif font-black text-xs tracking-tight text-[#ff5722] drop-shadow-sm">
+          <span className="font-serif font-black text-[11px] text-[#ff5722]">
             복쓸싸리
           </span>
-          <span className="w-px h-3 bg-amber-900/20" />
           <span className="text-[11px] font-extrabold text-stone-900 flex items-center gap-1">
-            <span>🔮{myKarma}</span>
+            <span className={isKarmaMax ? 'text-red-700 font-black' : ''}>
+              🔮{myKarma}/{MAX_KARMA}
+            </span>
             <span className="text-stone-400">·</span>
             <span>🫘{myRedBeans}</span>
           </span>
           <Settings className="w-3.5 h-3.5 text-stone-600" />
         </button>
 
-        {/* 중앙: 광장 ↔ 내동산 스위치 */}
-        <div className="h-9 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5 pointer-events-auto shrink-0">
+        {/* 중앙: 광장 / 내동산 스위치 */}
+        <div className="h-9 bg-[#fcf9f2]/95 backdrop-blur-md p-0.5 rounded-full shadow-md border border-stone-300/80 flex items-center pointer-events-auto shrink-0">
           <button
             onClick={() => onSwitchZone('public')}
-            className={`h-7 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 ${
+            className={`h-7 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 ${
               zoneMode === 'public'
                 ? 'bg-[#ff5722] text-white shadow'
-                : 'text-stone-700 hover:bg-stone-200/70'
+                : 'text-stone-700'
             }`}
           >
-            <Globe className="w-3 h-3 shrink-0" />
+            <Globe className="w-3 h-3" />
             <span>광장</span>
           </button>
           <button
             onClick={() => onSwitchZone('my_garden')}
-            className={`h-7 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 ${
+            className={`h-7 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 ${
               zoneMode === 'my_garden'
                 ? 'bg-lime-800 text-white shadow'
-                : 'text-stone-700 hover:bg-stone-200/70'
+                : 'text-stone-700'
             }`}
           >
-            <Home className="w-3 h-3 shrink-0" />
+            <Home className="w-3 h-3" />
             <span>내동산</span>
           </button>
         </div>
 
-        {/* 우측: 시점 전환 캡슐 */}
-        <div className="h-9 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5 pointer-events-auto shrink-0">
+        {/* 우측: 잘리지 않는 시점 캡슐 */}
+        <div className="h-9 bg-[#fcf9f2]/95 backdrop-blur-md p-0.5 rounded-full shadow-md border border-stone-300/80 flex items-center pointer-events-auto shrink-0">
           <button
             onClick={() => onSelectCameraMode('follow')}
-            className={`h-7 px-2 rounded-full text-[11px] font-extrabold transition flex items-center ${
+            className={`h-7 w-7 rounded-full flex items-center justify-center transition ${
               cameraMode === 'follow' && !hasFocusedTarget
                 ? 'bg-lime-800 text-white shadow'
-                : 'text-stone-700 hover:bg-stone-200/70'
+                : 'text-stone-700'
             }`}
-            title="내 캐릭터 시점"
           >
             <Compass className="w-3.5 h-3.5" />
           </button>
@@ -213,26 +210,23 @@ export const HudOverlay = ({
           {zoneMode === 'public' && (
             <button
               onClick={() => onSelectCameraMode('tree')}
-              className={`h-7 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 ${
+              className={`h-7 px-1.5 rounded-full text-[10px] font-extrabold transition flex items-center gap-0.5 ${
                 cameraMode === 'tree' && !hasFocusedTarget
                   ? 'bg-lime-800 text-white shadow'
-                  : 'text-stone-700 hover:bg-stone-200/70'
+                  : 'text-stone-700'
               }`}
-              title="당산나무 보기"
             >
-              <span>🌳</span>
-              <span>{hangingCount}</span>
+              <span>🌳{hangingCount}</span>
             </button>
           )}
 
           <button
             onClick={() => onSelectCameraMode('sky')}
-            className={`h-7 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 ${
+            className={`h-7 px-1.5 rounded-full text-[10px] font-extrabold transition flex items-center gap-0.5 ${
               cameraMode === 'sky'
                 ? 'bg-indigo-950 text-amber-300 shadow'
-                : 'text-stone-700 hover:bg-stone-200/70'
+                : 'text-stone-700'
             }`}
-            title="밤하늘 별자리 보기"
           >
             <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
             <span>{starCount}</span>
@@ -240,14 +234,14 @@ export const HudOverlay = ({
         </div>
       </header>
 
-      {/* --- 거대 대액운(HP 150) 협동 레이드 게이지 바 --- */}
+      {/* --- 대액운 게이지 바 --- */}
       {zoneMode === 'public' && activeBoss && !isAnyModalOpen && (
-        <div className="absolute top-14 left-4 right-4 z-20 flex justify-center pointer-events-none">
+        <div className="absolute top-13 inset-x-4 z-20 flex justify-center pointer-events-none">
           <div className="bg-fuchsia-950/90 backdrop-blur-md border border-fuchsia-400/70 px-3.5 py-1.5 rounded-2xl shadow-xl flex items-center gap-2.5 w-full max-w-xs">
-            <span className="text-[11px] font-black text-amber-200 whitespace-nowrap">
+            <span className="text-[11px] font-black text-amber-200">
               ⚡ 대액운
             </span>
-            <div className="flex-1 h-2.5 bg-stone-800 rounded-full overflow-hidden">
+            <div className="flex-1 h-2 bg-stone-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-fuchsia-500 to-amber-400 transition-all duration-300"
                 style={{
@@ -255,27 +249,27 @@ export const HudOverlay = ({
                 }}
               />
             </div>
-            <span className="text-[11px] font-black text-fuchsia-200 whitespace-nowrap">
+            <span className="text-[11px] font-black text-fuchsia-200">
               {activeBoss.hp}/{activeBoss.maxHp}
             </span>
           </div>
         </div>
       )}
 
-      {/* --- 내 동산 조경 배치 편집 안내 바 --- */}
+      {/* --- 내 동산 조경 배치 편집 컨트롤 바 --- */}
       {zoneMode === 'my_garden' && isEditDecorMode && !isAnyModalOpen && (
-        <div className="absolute top-14 left-3 right-3 z-20 flex justify-center pointer-events-none">
-          <div className="bg-amber-950/95 backdrop-blur-md border-2 border-amber-400 px-3.5 py-2 rounded-2xl shadow-2xl flex items-center justify-between gap-2 w-full max-w-sm pointer-events-auto">
+        <div className="absolute top-13 inset-x-3 z-20 flex justify-center pointer-events-none">
+          <div className="bg-amber-950/95 backdrop-blur-md border-2 border-amber-400 px-3 py-2 rounded-2xl shadow-2xl flex items-center justify-between gap-2 w-full max-w-sm pointer-events-auto">
             <div className="text-[11px] font-extrabold text-amber-100 truncate">
               {selectedCatalogItem
-                ? `${selectedCatalogItem.icon} [${selectedCatalogItem.name}] 이동할 바닥을 터치하세요!`
-                : '✋ 이동할 조경물을 먼저 터치해 선택하세요'}
+                ? `${selectedCatalogItem.icon} 이동할 땅을 터치하세요!`
+                : '✋ 옮길 조경물을 먼저 터치하세요'}
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {selectedDecorId && (
                 <button
                   onClick={onRotateSelectedDecor}
-                  className="px-2.5 py-1 rounded-xl bg-amber-400 text-stone-950 text-[10px] font-black flex items-center gap-1"
+                  className="px-2 py-1 rounded-xl bg-amber-400 text-stone-950 text-[10px] font-black flex items-center gap-1"
                 >
                   <RotateCw className="w-3 h-3" />
                   <span>회전</span>
@@ -292,82 +286,83 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 자동 숨김 토스트 배너 --- */}
+      {/* --- 토스트 알림 --- */}
       {bannerMessage &&
         !isAnyModalOpen &&
         !activeBoss &&
         !(zoneMode === 'my_garden' && isEditDecorMode) && (
-          <div className="absolute top-14 left-4 right-4 z-20 flex justify-center pointer-events-none">
-            <div className="bg-stone-900/85 backdrop-blur-md text-amber-200 px-4 py-1.5 rounded-full font-bold text-[11px] shadow-xl border border-amber-400/30 flex items-center gap-1.5 max-w-sm truncate">
+          <div className="absolute top-13 inset-x-4 z-20 flex justify-center pointer-events-none">
+            <div className="bg-stone-900/85 backdrop-blur-md text-amber-200 px-3.5 py-1.5 rounded-full font-bold text-[11px] shadow-xl border border-amber-400/30 flex items-center gap-1.5 max-w-full truncate">
               <SparkleIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
               <span className="truncate">{bannerMessage}</span>
             </div>
           </div>
         )}
 
-      {/* --- 별 승천 합동 축하 & 자유 이탈 바 --- */}
+      {/* --- 별 승천 축하 바 --- */}
       {ascendingWishNickname && !isAnyModalOpen && (
-        <div className="absolute bottom-20 left-4 right-4 z-30 flex justify-center pointer-events-none">
-          <div className="bg-indigo-950/90 backdrop-blur-md border-2 border-amber-300/80 rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
+        <div className="absolute bottom-18 inset-x-3 z-30 flex justify-center pointer-events-none">
+          <div className="bg-indigo-950/90 backdrop-blur-md border-2 border-amber-300/80 rounded-2xl p-2 shadow-2xl flex items-center gap-2 pointer-events-auto">
             <button
               onClick={onCelebrateAscension}
-              className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-black flex items-center gap-1.5 shadow animate-bounce whitespace-nowrap"
+              className="px-3 py-1.5 rounded-xl bg-amber-400 text-stone-950 text-xs font-black flex items-center gap-1 shadow animate-bounce"
             >
               <PartyPopper className="w-4 h-4 shrink-0" />
-              <span>🧧 {ascendingWishNickname}님 별 축하! (🔮+2)</span>
+              <span>🧧 {ascendingWishNickname}님 별 축하!</span>
             </button>
             <button
               onClick={onExitAscensionView}
-              className="px-2.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold whitespace-nowrap"
+              className="px-2.5 py-1.5 rounded-xl bg-white/15 text-white text-[11px] font-bold"
             >
-              시점 복귀
+              복귀
             </button>
           </div>
         </div>
       )}
 
-      {/* --- 하단 컨트롤 바 --- */}
-      <div className="absolute bottom-4 left-3 right-3 z-20 flex items-end justify-between gap-2 pointer-events-none whitespace-nowrap">
-        <div className="pointer-events-auto shrink-0">
-          <button
-            onClick={onOpenFortuneModal}
-            className={`h-11 px-3.5 rounded-full font-extrabold text-xs shadow-xl flex items-center gap-1.5 transition transform active:scale-95 border-2 whitespace-nowrap ${
-              isBloomed
-                ? 'bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 text-stone-950 border-white ring-2 ring-amber-300/70 animate-pulse'
-                : 'bg-[#fcf9f2]/95 text-stone-800 border-stone-300'
-            }`}
-          >
-            <span>{isBloomed ? '🪷' : '🌷'}</span>
-            <span>
-              {isBloomed
-                ? '오늘의 운세 부적!'
-                : `운세 (${myKarma}/${KARMA_THRESHOLDS.BLOOM})`}
-            </span>
-          </button>
-        </div>
+      {/* --- 하단 바: 화면 밖으로 절대 밀려나지 않는 안전 정렬 --- */}
+      <div className="absolute bottom-3.5 inset-x-2.5 z-20 flex items-end justify-between gap-1.5 pointer-events-none">
+        {/* 좌측 하단: 오늘의 운세 복권 버튼 */}
+        <button
+          onClick={onOpenFortuneModal}
+          className={`h-10 px-3 rounded-full font-extrabold text-xs shadow-xl flex items-center gap-1 pointer-events-auto transition active:scale-95 border-2 shrink-0 ${
+            isBloomed
+              ? 'bg-gradient-to-r from-amber-300 to-amber-400 text-stone-950 border-white ring-2 ring-amber-300/70 animate-pulse'
+              : 'bg-[#fcf9f2]/95 text-stone-800 border-stone-300'
+          }`}
+        >
+          <span>{isBloomed ? '🪷' : '🌷'}</span>
+          <span>
+            {isBloomed
+              ? '오늘의 운세!'
+              : `운세 (${myKarma}/${KARMA_THRESHOLDS.BLOOM})`}
+          </span>
+        </button>
 
-        <div className="pointer-events-auto flex flex-col items-end gap-2 shrink-0">
+        {/* 우측 하단: 액션 팝업 & 최대 3개 버튼 유지 */}
+        <div className="pointer-events-auto relative flex flex-col items-end gap-2 shrink-0">
+          {/* 화면 오른쪽 끝에 딱 맞춰 정렬되어 잘리지 않는 표현 팝업 */}
           {isActionMenuOpen && (
-            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-2.5 rounded-3xl shadow-2xl border-2 border-amber-900/20 w-[250px] space-y-2">
+            <div className="absolute bottom-12 right-0 bg-[#fcf9f2]/95 backdrop-blur-md p-2.5 rounded-3xl shadow-2xl border-2 border-amber-900/20 w-[236px] space-y-2 z-30">
               <div className="text-[10px] font-extrabold text-stone-500 px-1">
-                온몸으로 표현하기 (몸짓 4종)
+                몸짓 표현 (4종)
               </div>
               <div className="grid grid-cols-4 gap-1">
                 <button
                   onClick={() => handleActionClick('jump', '🙌 만세!')}
-                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                  className="py-1.5 rounded-xl bg-amber-100 text-stone-900 text-[10px] font-extrabold"
                 >
                   🙌 점프
                 </button>
                 <button
                   onClick={() => handleActionClick('roll', '🌀 데구르르!')}
-                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                  className="py-1.5 rounded-xl bg-amber-100 text-stone-900 text-[10px] font-extrabold"
                 >
                   🌀 구르기
                 </button>
                 <button
                   onClick={() => handleActionClick('bow', '🙇 복 받으시개!')}
-                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                  className="py-1.5 rounded-xl bg-amber-100 text-stone-900 text-[10px] font-extrabold"
                 >
                   🙇 절하기
                 </button>
@@ -381,7 +376,7 @@ export const HudOverlay = ({
                   className={`py-1.5 rounded-xl text-[10px] font-extrabold ${
                     myAction === 'sit'
                       ? 'bg-lime-800 text-white'
-                      : 'bg-amber-100 hover:bg-amber-200 text-stone-900'
+                      : 'bg-amber-100 text-stone-900'
                   }`}
                 >
                   🍞 앉기
@@ -389,15 +384,14 @@ export const HudOverlay = ({
               </div>
 
               <div className="text-[10px] font-extrabold text-stone-500 px-1 pt-1 border-t border-stone-200">
-                마음 이모티콘 (8종)
+                이모티콘 (8종)
               </div>
               <div className="grid grid-cols-4 gap-1">
                 {QUICK_EMOTES.map((em) => (
                   <button
                     key={em.icon}
                     onClick={() => handleActionClick('idle', em.label)}
-                    className="py-1.5 rounded-xl bg-white hover:bg-stone-100 border border-stone-200 text-base shadow-sm active:scale-90 transition"
-                    title={em.label}
+                    className="py-1.5 rounded-xl bg-white border border-stone-200 text-base shadow-sm active:scale-90"
                   >
                     {em.icon}
                   </button>
@@ -406,65 +400,51 @@ export const HudOverlay = ({
             </div>
           )}
 
-          <div className="flex items-center gap-1.5 whitespace-nowrap">
+          <div className="flex items-center gap-1.5">
             {zoneMode === 'my_garden' && (
-              <>
-                <button
-                  onClick={() => setIsEditDecorMode(!isEditDecorMode)}
-                  className={`h-11 px-3 rounded-full font-extrabold text-xs shadow-xl border flex items-center gap-1 transition active:scale-95 whitespace-nowrap ${
-                    isEditDecorMode
-                      ? 'bg-amber-400 text-stone-950 border-white ring-2 ring-amber-300'
-                      : 'bg-[#fcf9f2]/95 text-stone-800 border-stone-300'
-                  }`}
-                >
-                  <Move className="w-3.5 h-3.5 shrink-0" />
-                  <span>{isEditDecorMode ? '편집중' : '배치편집'}</span>
-                </button>
-
-                <button
-                  onClick={() => setIsGardenShopOpen(true)}
-                  className="h-11 px-3.5 rounded-full bg-amber-900 hover:bg-amber-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-300/60 flex items-center gap-1 transition active:scale-95 whitespace-nowrap"
-                >
-                  <Store className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-                  <span>조경도감</span>
-                </button>
-              </>
+              <button
+                onClick={() => setIsGardenShopOpen(true)}
+                className="h-10 px-3 rounded-full bg-amber-900 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-300/60 flex items-center gap-1 active:scale-95"
+              >
+                <Store className="w-3.5 h-3.5 text-amber-300" />
+                <span>조경</span>
+              </button>
             )}
 
             <button
               onClick={onSmartPurifyAction}
-              className={`h-11 px-4 rounded-full font-extrabold text-xs shadow-xl border-2 flex items-center gap-1 transition transform active:scale-95 whitespace-nowrap ${
+              className={`h-10 px-3.5 rounded-full font-extrabold text-xs shadow-xl border-2 flex items-center gap-1 active:scale-95 ${
                 canUseRedBeanBoost
-                  ? 'bg-red-800 hover:bg-red-700 text-amber-100 border-amber-300 animate-bounce'
-                  : 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white'
+                  ? 'bg-red-800 text-amber-100 border-amber-300 animate-bounce'
+                  : 'bg-amber-400 text-stone-950 border-white'
               }`}
             >
               <span>{canUseRedBeanBoost ? '🫘' : '🧹'}</span>
-              <span>{canUseRedBeanBoost ? '팥액막이!' : '쓸기'}</span>
+              <span>{canUseRedBeanBoost ? '팥액막이' : '쓸기'}</span>
             </button>
 
             <button
               onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
-              className="h-11 px-3.5 rounded-full bg-[#fcf9f2]/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 transition transform active:scale-95 whitespace-nowrap"
+              className="h-10 px-3 rounded-full bg-[#fcf9f2]/95 text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 active:scale-95"
             >
-              <Smile className="w-4 h-4 text-amber-500 shrink-0" />
+              <Smile className="w-4 h-4 text-amber-500" />
               <span>표현</span>
             </button>
 
             {zoneMode === 'public' && isNearTree && (
               <button
                 onClick={onOpenWriteModal}
-                className="h-11 px-4 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-1 transition transform active:scale-95 border-2 bg-[#ff5722] hover:bg-[#f4511e] text-white border-amber-200 ring-4 ring-amber-300/50 animate-pulse whitespace-nowrap"
+                className="h-10 px-3 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-1 border-2 bg-[#ff5722] text-white border-amber-200 animate-pulse"
               >
-                <ScrollText className="w-3.5 h-3.5 shrink-0" />
-                <span>기원 올리기 ✨</span>
+                <ScrollText className="w-3.5 h-3.5" />
+                <span>기원</span>
               </button>
             )}
           </div>
         </div>
       </div>
 
-      {/* --- 내 동산 조경 도감 모달 --- */}
+      {/* --- 내 동산 조경 도감 모달 ([배치 위치 편집] 버튼 통합) --- */}
       {isGardenShopOpen && (
         <div
           onClick={() => setIsGardenShopOpen(false)}
@@ -472,35 +452,34 @@ export const HudOverlay = ({
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="bg-[#fbf6e9] w-full max-w-[400px] max-h-[85dvh] overflow-y-auto rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-4"
+            className="bg-[#fbf6e9] w-full max-w-[380px] max-h-[85dvh] overflow-y-auto rounded-3xl p-4 shadow-2xl border-4 border-double border-amber-900/40 space-y-3"
           >
-            <div className="flex items-center justify-between border-b border-amber-900/15 pb-3">
-              <div>
-                <span className="text-[10px] font-extrabold text-lime-900 bg-lime-200 px-2 py-0.5 rounded-full">
-                  🏡 내 동산 꾸미기 · 공덕 교환소
-                </span>
-                <h3 className="text-base font-extrabold text-stone-900 mt-0.5">
-                  전통 조경 오브제 도감
-                </h3>
-              </div>
+            <div className="flex items-center justify-between border-b border-amber-900/15 pb-2.5">
+              <h3 className="text-sm font-extrabold text-stone-900">
+                🏡 내 동산 조경 도감 (🔮{myKarma}/{MAX_KARMA} · 🫘{myRedBeans})
+              </h3>
               <button
                 onClick={() => setIsGardenShopOpen(false)}
-                className="p-1.5 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-700"
+                className="p-1 rounded-full bg-stone-200 text-stone-700"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center justify-between bg-amber-100/80 px-3.5 py-2 rounded-2xl border border-amber-900/15 text-xs font-extrabold text-amber-950">
-              <span>내 보유 재화</span>
-              <span className="flex items-center gap-2">
-                <span>🔮 공덕 {myKarma}점</span>
-                <span>·</span>
-                <span>🫘 붉은 팥 {myRedBeans}알</span>
-              </span>
-            </div>
+            {/* 조경 위치 이동 모드 진입 버튼 */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsGardenShopOpen(false);
+                setIsEditDecorMode(true);
+              }}
+              className="w-full py-2.5 bg-amber-400 hover:bg-amber-300 text-stone-950 rounded-2xl text-xs font-black shadow flex items-center justify-center gap-1.5"
+            >
+              <Move className="w-4 h-4" />
+              <span>✋ 배치된 조경물 위치 옮기기 / 회전하기</span>
+            </button>
 
-            <div className="space-y-2.5">
+            <div className="space-y-2">
               {GARDEN_CATALOG.map((item) => {
                 const isUnlocked = unlockedDecor.includes(item.id);
                 const isPlaced = Boolean(decorLayout[item.id]);
@@ -510,28 +489,25 @@ export const HudOverlay = ({
                 return (
                   <div
                     key={item.id}
-                    className={`p-3 rounded-2xl border-2 flex items-center justify-between gap-3 transition ${
+                    className={`p-2.5 rounded-2xl border flex items-center justify-between gap-2 ${
                       isPlaced
-                        ? 'bg-lime-50/90 border-lime-700'
-                        : 'bg-white/90 border-stone-200'
+                        ? 'bg-lime-50 border-lime-700'
+                        : 'bg-white border-stone-200'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-11 h-11 rounded-2xl bg-amber-100 flex items-center justify-center text-2xl shrink-0 shadow-inner">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-xl shrink-0">
                         {item.icon}
                       </div>
                       <div className="min-w-0">
                         <div className="text-xs font-extrabold text-stone-900 truncate">
                           {item.name}
                         </div>
-                        <p className="text-[10px] text-stone-600 line-clamp-2">
-                          {item.desc}
-                        </p>
-                        {!isUnlocked && (
-                          <div className="text-[10px] font-extrabold text-amber-900 mt-0.5">
-                            필요: 🔮{item.karmaCost} · 🫘{item.beanCost}
-                          </div>
-                        )}
+                        <div className="text-[10px] font-bold text-amber-900">
+                          {isUnlocked
+                            ? '보유 중'
+                            : `필요: 🔮${item.karmaCost} · 🫘${item.beanCost}`}
+                        </div>
                       </div>
                     </div>
 
@@ -539,21 +515,17 @@ export const HudOverlay = ({
                       type="button"
                       disabled={!isUnlocked && !canAfford}
                       onClick={() => onBuyOrToggleDecor(item)}
-                      className={`px-3 py-2 rounded-xl text-[11px] font-extrabold whitespace-nowrap shrink-0 shadow transition ${
+                      className={`px-3 py-1.5 rounded-xl text-[11px] font-extrabold shrink-0 ${
                         isUnlocked
                           ? isPlaced
                             ? 'bg-lime-800 text-white'
-                            : 'bg-stone-200 text-stone-800 hover:bg-stone-300'
+                            : 'bg-stone-200 text-stone-800'
                           : canAfford
-                          ? 'bg-[#ff5722] hover:bg-[#f4511e] text-white'
-                          : 'bg-stone-200 text-stone-400 cursor-not-allowed'
+                          ? 'bg-[#ff5722] text-white'
+                          : 'bg-stone-200 text-stone-400'
                       }`}
                     >
-                      {isUnlocked
-                        ? isPlaced
-                          ? '✓ 배치됨'
-                          : '배치하기'
-                        : '교환하기'}
+                      {isUnlocked ? (isPlaced ? '✓ 배치됨' : '배치') : '교환'}
                     </button>
                   </div>
                 );
@@ -563,7 +535,7 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 홍보영상 시그니처 브랜드 헤더가 들어간 통합 설정 모달 --- */}
+      {/* --- 3단으로 깔끔하게 다이어트된 설정 모달 --- */}
       {isProfileModalOpen && (
         <div
           onClick={() => setIsProfileModalOpen(false)}
@@ -572,144 +544,114 @@ export const HudOverlay = ({
           <form
             onClick={(e) => e.stopPropagation()}
             onSubmit={onSaveProfile}
-            className="bg-[#fbf6e9] w-full max-w-[360px] max-h-[88dvh] overflow-y-auto rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-3.5"
+            className="bg-[#fbf6e9] w-full max-w-[340px] rounded-3xl p-4 shadow-2xl border-4 border-double border-amber-900/40 space-y-3.5"
           >
-            {/* 홍보영상 4번째 캡처 시그니처 배너 */}
-            <div className="bg-[#fef9c3] border-2 border-[#ff5722]/30 rounded-2xl p-3 flex items-center justify-between">
-              <div>
-                <div className="font-serif font-black text-lg text-[#ff5722] tracking-tight">
-                  복쓸싸리 동산
-                </div>
-                <div className="text-[10px] font-extrabold text-stone-600">
-                  🟢 현재 {totalOnlineCount}명의 복쓸덩이가 산책 중
-                </div>
+            <div className="flex items-center justify-between border-b border-amber-900/15 pb-2">
+              <div className="flex items-center gap-2">
+                <span className="font-serif font-black text-base text-[#ff5722]">
+                  복쓸싸리 설정
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full text-[10px] font-extrabold">
+                  🟢 {totalOnlineCount}명 산책 중
+                </span>
               </div>
               <button
                 type="button"
                 onClick={() => setIsProfileModalOpen(false)}
-                className="p-1.5 rounded-full bg-white/80 text-stone-700"
+                className="p-1 rounded-full bg-stone-200 text-stone-700"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="bg-amber-100/80 border border-amber-900/15 rounded-2xl p-3 space-y-1">
-              <div className="flex items-center justify-between text-xs font-extrabold text-amber-950">
-                <span>오늘의 수호꽃: {FLOWER_NAMES[myFlowerType]}</span>
-                <span className="px-2 py-0.5 bg-amber-300 rounded-full text-[10px]">
-                  {stageLabels[stage]}
+            {/* 1단: 내 복쓸덩이 이름 & 색상 한 박스에 통합 */}
+            <div className="bg-white/90 p-3 rounded-2xl border border-stone-200 space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold text-stone-700 shrink-0">
+                  이름
                 </span>
+                <input
+                  type="text"
+                  required
+                  maxLength={10}
+                  value={myNickname}
+                  onChange={(e) => setMyNickname(e.target.value)}
+                  className="flex-1 min-w-0 px-2.5 py-1.5 rounded-xl bg-stone-100 border border-stone-300 text-xs font-bold text-stone-900"
+                />
               </div>
-              <p className="text-[11px] text-stone-700 font-bold">
-                보유 공덕: 🔮 {myKarma}점 · 붉은 팥: 🫘 {myRedBeans}알
-              </p>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-stone-700">
+                  머리끈
+                </span>
+                <div className="flex gap-1.5">
+                  {RANDOM_COLORS.map((c) => (
+                    <button
+                      type="button"
+                      key={c}
+                      onClick={() => setMyColor(c)}
+                      className={`w-6 h-6 rounded-full transition ${
+                        myColor === c
+                          ? 'ring-2 ring-stone-900 scale-110'
+                          : 'opacity-55'
+                      }`}
+                      style={{ backgroundColor: c }}
+                    />
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsProfileModalOpen(false);
-                  onOpenO2OModal();
-                }}
-                className="p-2.5 rounded-2xl bg-stone-900 text-amber-200 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow"
-              >
-                <Gift className="w-4 h-4 text-amber-400" />
-                <span>O2O 코드 등록</span>
-              </button>
-
+            {/* 2단: 환경 & 퀵 액션 버튼 바 */}
+            <div className="grid grid-cols-3 gap-1.5">
               <button
                 type="button"
                 onClick={onToggleNightMode}
-                className="p-2.5 rounded-2xl bg-white border border-stone-300 text-stone-800 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm"
+                className="py-2 rounded-xl bg-white border border-stone-300 text-stone-800 text-[11px] font-extrabold"
               >
-                <span>{isNightMode ? '☀️ 낮으로 전환' : '🌙 밤으로 전환'}</span>
+                {isNightMode ? '☀️ 낮 전환' : '🌙 밤 전환'}
               </button>
-
               <button
                 type="button"
                 onClick={() => {
                   onCopyInviteLink();
                   setIsProfileModalOpen(false);
                 }}
-                className="p-2.5 rounded-2xl bg-white border border-stone-300 text-stone-800 text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm"
+                className="py-2 rounded-xl bg-white border border-stone-300 text-stone-800 text-[11px] font-extrabold flex items-center justify-center gap-1"
               >
-                <Share2 className="w-3.5 h-3.5 text-lime-800" />
-                <span>초대 링크 복사</span>
+                <Share2 className="w-3 h-3 text-lime-800" />
+                <span>초대복사</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => {
                   setIsProfileModalOpen(false);
-                  onOpenWriteModal();
+                  onOpenO2OModal();
                 }}
-                className="p-2.5 rounded-2xl bg-[#ff5722] text-white text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-sm"
+                className="py-2 rounded-xl bg-stone-900 text-amber-200 text-[11px] font-extrabold flex items-center justify-center gap-1"
               >
-                <ScrollText className="w-3.5 h-3.5" />
-                <span>기원 인장 올리기</span>
+                <Gift className="w-3 h-3 text-amber-400" />
+                <span>O2O코드</span>
               </button>
             </div>
 
-            <div>
-              <label className="block text-xs font-extrabold text-stone-700 mb-1">
-                내 복쓸덩이 이름
-              </label>
+            {/* 3단: 별 승천 시점 토글 & 저장 */}
+            <label className="flex items-center justify-between px-1 cursor-pointer">
+              <span className="text-xs font-extrabold text-stone-700">
+                🌟 이웃의 별 승천 연출 자동 보기
+              </span>
               <input
-                type="text"
-                required
-                maxLength={10}
-                value={myNickname}
-                onChange={(e) => setMyNickname(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl bg-white border border-stone-300 text-sm font-bold text-stone-900"
+                type="checkbox"
+                checked={autoWatchAscension}
+                onChange={(e) => setAutoWatchAscension(e.target.checked)}
+                className="w-4 h-4 accent-lime-800 rounded"
               />
-            </div>
-
-            <div>
-              <label className="block text-xs font-extrabold text-stone-700 mb-1.5">
-                머리끈 색상
-              </label>
-              <div className="flex gap-2">
-                {RANDOM_COLORS.map((c) => (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setMyColor(c)}
-                    className={`w-7 h-7 rounded-full shadow transition ${
-                      myColor === c
-                        ? 'ring-2 ring-stone-900 scale-110'
-                        : 'opacity-60'
-                    }`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white/80 p-3 rounded-2xl border border-stone-200">
-              <label className="flex items-center justify-between cursor-pointer">
-                <div>
-                  <div className="text-xs font-extrabold text-stone-800">
-                    🌟 별 승천 연출 함께 보기
-                  </div>
-                  <div className="text-[10px] text-stone-500">
-                    소원이 하늘로 떠오를 때 시선이 자동으로 따라갑니다
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={autoWatchAscension}
-                  onChange={(e) => setAutoWatchAscension(e.target.checked)}
-                  className="w-5 h-5 accent-lime-800 rounded cursor-pointer"
-                />
-              </label>
-            </div>
+            </label>
 
             <button
               type="submit"
               className="w-full py-2.5 bg-lime-800 hover:bg-lime-700 text-white rounded-xl text-xs font-extrabold shadow"
             >
-              설정 저장하기
+              저장하기
             </button>
           </form>
         </div>

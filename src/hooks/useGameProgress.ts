@@ -11,6 +11,8 @@ import {
   KARMA_THRESHOLDS,
   O2O_REWARD_CODES,
   GARDEN_CATALOG,
+  MAX_KARMA,
+  MAX_RED_BEANS,
 } from '../utils/constants';
 
 export const getGrowthStage = (karma: number): 0 | 1 | 2 | 3 => {
@@ -66,15 +68,18 @@ export const useGameProgress = () => {
   });
 
   // 하루 시작 기본 공덕 10점 (노력을 통해 100점까지 모아야 만개)
-  const [karma, setKarma] = useState<number>(() => {
+const [karma, setKarma] = useState<number>(() => {
     const savedDate = localStorage.getItem('bokssul_daily_date');
     if (savedDate !== todayKey) {
       localStorage.setItem('bokssul_daily_date', todayKey);
-      localStorage.setItem('bokssul_karma', '10');
-      return 10;
+      localStorage.setItem('bokssul_karma', '2');
+      return 2;
     }
     const saved = localStorage.getItem('bokssul_karma');
-    return saved ? parseInt(saved, 10) : 10;
+    const parsed = saved ? parseInt(saved, 10) : 2;
+    const clamped = Math.min(MAX_KARMA, Math.max(0, parsed));
+    localStorage.setItem('bokssul_karma', String(clamped));
+    return clamped;
   });
 
   const [redBeans, setRedBeans] = useState<number>(() => {
@@ -160,9 +165,9 @@ export const useGameProgress = () => {
     return () => clearTimeout(timer);
   }, [beanPlots]);
 
-  const addKarma = useCallback((amount: number) => {
+const addKarma = useCallback((amount: number) => {
     setKarma((prev) => {
-      const next = Math.max(0, prev + amount);
+      const next = Math.min(MAX_KARMA, Math.max(0, prev + amount));
       localStorage.setItem('bokssul_karma', String(next));
       return next;
     });
@@ -170,7 +175,7 @@ export const useGameProgress = () => {
 
   const addRedBeans = useCallback((amount: number) => {
     setRedBeans((prev) => {
-      const next = Math.max(0, prev + amount);
+      const next = Math.min(MAX_RED_BEANS, Math.max(0, prev + amount));
       localStorage.setItem('bokssul_redbeans', String(next));
       return next;
     });

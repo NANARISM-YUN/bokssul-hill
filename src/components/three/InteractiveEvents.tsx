@@ -451,34 +451,40 @@ export const WishAltarAndOrbs = ({
 
   return (
     <group>
+      {/* 지형과 절대 겹치지 않도록 지면 위로 높게 세운 입체 전통 붉은 복항아리 */}
       <group position={[altarX, altarY, altarZ]}>
-        <mesh position={[0, -0.1, 0]} receiveShadow>
-          <cylinderGeometry args={[1.65, 1.85, 0.55, 24]} />
-          <meshToonMaterial color="#5d4037" />
+        {/* 1. 넓은 돌기단 받침대 (언덕 경사를 완전히 덮음) */}
+        <mesh position={[0, 0.12, 0]} receiveShadow>
+          <cylinderGeometry args={[1.65, 1.85, 0.45, 24]} />
+          <meshToonMaterial color="#78716c" />
         </mesh>
 
-        <mesh position={[0, 0.28, 0]}>
-          <cylinderGeometry args={[1.55, 1.25, 0.55, 24, 1, true]} />
-          <meshToonMaterial color="#8d6e63" side={THREE.DoubleSide} />
+        {/* 2. 볼록한 붉은 복항아리 몸통 */}
+        <mesh position={[0, 0.62, 0]}>
+          <cylinderGeometry args={[1.38, 1.52, 0.65, 24]} />
+          <meshToonMaterial color="#7f1d1d" />
         </mesh>
 
-        <mesh position={[0, 0.55, 0]} rotation={[Math.PI / 2, 0, 0]}>
-          <torusGeometry args={[1.52, 0.12, 10, 28]} />
+        {/* 3. 항아리 입구 황금 테두리 */}
+        <mesh position={[0, 0.96, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[1.38, 0.12, 10, 28]} />
           <meshToonMaterial color={meteorActive ? '#fef08a' : '#facc15'} />
         </mesh>
 
-        <mesh position={[0, 0.18, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[1.38, 24]} />
+        {/* 4. 땅보다 훨씬 위(y=0.95)에 위치해 절대 잔디와 겹치지 않는 항아리 안쪽 홀 */}
+        <mesh position={[0, 0.95, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[1.32, 24]} />
           <meshBasicMaterial color={meteorActive ? '#fef08a' : '#1c1917'} />
         </mesh>
 
+        {/* 수집 구슬 보석 3개 */}
         {[0, 1, 2].map((idx) => {
           const angle = (idx * Math.PI * 2) / 3 - Math.PI / 2;
           const isFilled = idx < collectedCount || meteorActive;
           return (
             <mesh
               key={idx}
-              position={[Math.cos(angle) * 1.52, 0.68, Math.sin(angle) * 1.52]}
+              position={[Math.cos(angle) * 1.4, 1.1, Math.sin(angle) * 1.4]}
             >
               <sphereGeometry args={[0.2, 12, 12]} />
               <meshStandardMaterial
@@ -492,15 +498,15 @@ export const WishAltarAndOrbs = ({
 
         {!hideLabels && (
           <Html
-            position={[0, 1.05, 0]}
+            position={[0, 1.45, 0]}
             center
             distanceFactor={15}
             zIndexRange={[10, 0]}
           >
-            <div className="px-2.5 py-0.5 bg-stone-900/85 backdrop-blur-sm border border-amber-400/60 rounded-full text-[10px] font-extrabold text-amber-200 whitespace-nowrap shadow-md pointer-events-none">
+            <div className="px-2.5 py-0.5 bg-stone-900/90 border border-amber-400/60 rounded-full text-[10px] font-extrabold text-amber-200 whitespace-nowrap shadow-md pointer-events-none">
               {meteorActive
                 ? '🧧 하늘에서 복주머니가 쏟아집니다!'
-                : `🧺 복바구니 ${collectedCount} / 3`}
+                : `🏺 복항아리 ${collectedCount} / 3`}
             </div>
           </Html>
         )}
