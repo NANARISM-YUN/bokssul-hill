@@ -9,13 +9,14 @@ import type {
   RemotePlayer,
   FlowerType,
   Wish,
+  ZoneMode,
 } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 import { BokssulAvatarMesh } from './BokssulAvatar';
 
 export const BokssulPlayerAndCamera = ({
+  zoneMode = 'public',
   keys,
-  joystickVec,
   clickTarget,
   clearClickTarget,
   followingPlayer,
@@ -36,10 +37,11 @@ export const BokssulPlayerAndCamera = ({
   myEmote = null,
   myKarma = 0,
   myFlowerType = 'pink_lotus',
+  hasO2OCrown = false,
   onPositionBroadcast,
 }: {
+  zoneMode?: ZoneMode;
   keys: React.MutableRefObject<{ [key: string]: boolean }>;
-  joystickVec: React.MutableRefObject<{ x: number; y: number }>;
   clickTarget: { x: number; z: number } | null;
   clearClickTarget: () => void;
   followingPlayer: RemotePlayer | null;
@@ -64,6 +66,7 @@ export const BokssulPlayerAndCamera = ({
   myEmote?: string | null;
   myKarma?: number;
   myFlowerType?: FlowerType;
+  hasO2OCrown?: boolean;
   onPositionBroadcast?: (state: {
     x: number;
     z: number;
@@ -99,28 +102,26 @@ export const BokssulPlayerAndCamera = ({
     const dt = Math.min(delta, 0.05);
 
     const speed = 5.8;
-    let inputX = joystickVec.current.x;
-    let inputZ = joystickVec.current.y;
+    let inputX = 0;
+    let inputZ = 0;
 
     if (keys.current['ArrowUp'] || keys.current['KeyW']) inputZ -= 1;
     if (keys.current['ArrowDown'] || keys.current['KeyS']) inputZ += 1;
     if (keys.current['ArrowLeft'] || keys.current['KeyA']) inputX -= 1;
     if (keys.current['ArrowRight'] || keys.current['KeyD']) inputX += 1;
 
-    const hasManualInput = Math.hypot(inputX, inputZ) > 0.05;
+    const hasKeyboardInput = Math.hypot(inputX, inputZ) > 0.05;
 
-    if (hasManualInput) {
+    if (hasKeyboardInput) {
       if (clickTarget) clearClickTarget();
       if (followingPlayer) stopFollowing();
     }
 
     const moveVec = new THREE.Vector3();
     let isMoving = false;
-    let moveLen = 1;
 
-    if (hasManualInput) {
+    if (hasKeyboardInput) {
       isMoving = true;
-      moveLen = Math.min(1, Math.hypot(inputX, inputZ));
       const normX = inputX / (Math.hypot(inputX, inputZ) || 1);
       const normZ = inputZ / (Math.hypot(inputX, inputZ) || 1);
 
@@ -155,8 +156,8 @@ export const BokssulPlayerAndCamera = ({
     }
 
     if (isMoving) {
-      playerPosRef.current.x += moveVec.x * speed * moveLen * dt;
-      playerPosRef.current.z += moveVec.z * speed * moveLen * dt;
+      playerPosRef.current.x += moveVec.x * speed * dt;
+      playerPosRef.current.z += moveVec.z * speed * dt;
 
       const distFromOrigin = Math.hypot(
         playerPosRef.current.x,
@@ -166,7 +167,8 @@ export const BokssulPlayerAndCamera = ({
         playerPosRef.current.x = (playerPosRef.current.x / distFromOrigin) * 25;
         playerPosRef.current.z = (playerPosRef.current.z / distFromOrigin) * 25;
       }
-      if (distFromOrigin < 2.2) {
+      // 광장일 때만 중앙 당산나무 기둥(2.2m) 충돌 판정 적용, 내 동산은 마당 중앙까지 자유 이동!
+      if (zoneMode === 'public' && distFromOrigin < 2.2) {
         playerPosRef.current.x = (playerPosRef.current.x / distFromOrigin) * 2.2;
         playerPosRef.current.z = (playerPosRef.current.z / distFromOrigin) * 2.2;
       }
@@ -183,8 +185,8 @@ export const BokssulPlayerAndCamera = ({
     }
 
     playerMoveVecRef.current = {
-      x: moveVec.x * speed * moveLen,
-      z: moveVec.z * speed * moveLen,
+      x: moveVec.x * speed,
+      z: moveVec.z * speed,
       isMoving,
     };
 
@@ -254,10 +256,8 @@ export const BokssulPlayerAndCamera = ({
     }
     wasMovingRef.current = isMoving;
 
-    // --- 카메라 제어 (⭐ 별 승천 실시간 궤적 추적 추가) ---
     if (controlsRef.current) {
       if (ascendingWish && cameraMode === 'sky') {
-        // 별이 나뭇가지에서 하늘로 솟구치는 실시간 위치를 계산해 시선이 끝까지 따라감
         ascensionProgressRef.current = Math.min(
           1,
           ascensionProgressRef.current + dt * 0.35
@@ -303,7 +303,7 @@ export const BokssulPlayerAndCamera = ({
       playerPosRef.current.x,
       playerPosRef.current.z
     );
-    const isNearNow = distToTree < 5.8;
+    const isNearNow = zoneMode === 'public' && distToTree < 5.8;
     if (isNearNow !== nearRef.current) {
       nearRef.current = isNearNow;
       onNearTreeChange(isNearNow);
@@ -333,6 +333,7 @@ export const BokssulPlayerAndCamera = ({
               </div>
             )}
             <div className="px-2.5 py-0.5 bg-white/95 backdrop-blur-sm rounded-full text-[11px] font-extrabold text-lime-950 shadow-md border border-lime-700/30 whitespace-nowrap flex items-center gap-1">
+              {hasO2OCrown && <span>👑</span>}
               <span
                 className="w-2 h-2 rounded-full shrink-0"
                 style={{ backgroundColor: myColor }}
@@ -344,7 +345,7 @@ export const BokssulPlayerAndCamera = ({
       )}
 
       {(myAction === 'jump' || myAction === 'sweep' || highFiveSpark) && (
-        <Sparkles count={25} scale={2.2} size={5} speed={2} color="#fde047" />
+        <Sparkles count={22} scale={2.2} size={5} speed={2} color="#fde047" />
       )}
 
       <BokssulAvatarMesh

@@ -14,6 +14,123 @@ export const WISH_KARMA_COST = 15;
 export const WISH_BEAN_KARMA_COST = 10;
 export const BLESS_KARMA_COST = 2;
 
+export const KARMA_THRESHOLDS = {
+  SPROUT: 10,
+  BUD: 20,
+  BLOOM: 30, // 하루 3~5분 플레이(30공덕)로 오늘의 보상화 만개 & 오늘의 운세 해금!
+};
+
+export const FLOWER_TYPES: FlowerType[] = [
+  'white_lotus',
+  'pink_lotus',
+  'peony',
+  'gold_plum',
+  'blue_bosang',
+];
+
+export const FLOWER_NAMES: Record<FlowerType, string> = {
+  white_lotus: '🪷 백련화',
+  pink_lotus: '🌸 홍련화',
+  peony: '🌺 모란화',
+  gold_plum: '🌼 황매화',
+  blue_bosang: '💠 청보상화',
+};
+
+// 오늘의 보상화별 점괘 & 부적 문구 데이터베이스
+export interface DailyFortuneInfo {
+  title: string;
+  hanja: string;
+  summary: string;
+  detail: string;
+  luckyItem: string;
+  luckyPlace: string;
+  bgColor: string;
+  accentColor: string;
+}
+
+export const DAILY_FORTUNES: Record<FlowerType, DailyFortuneInfo> = {
+  white_lotus: {
+    title: '청정무구(淸淨無垢) · 백련화의 날',
+    hanja: '淸淨萬福',
+    summary: '마음의 먼지가 씻겨 내려가고 뜻밖의 평안과 귀한 소식이 찾아옵니다.',
+    detail:
+      '어지럽던 고민이 싸리빗자루에 쓸려가듯 맑아지는 하루입니다. 서두르지 않고 순리대로 걸어가면 오후 무렵 반가운 연락이나 작은 행운이 발걸음을 멈추게 할 것입니다.',
+    luckyItem: '따뜻한 차 한 잔과 흰색 소품',
+    luckyPlace: '고즈넉한 골목길 · 나무 그늘 아래',
+    bgColor: '#f8fafc',
+    accentColor: '#0f766e',
+  },
+  pink_lotus: {
+    title: '자비량연(慈悲良緣) · 홍련화의 날',
+    hanja: '良緣和合',
+    summary: '다정한 인연의 기운이 만개하여 주변 사람들과 웃음꽃이 피어납니다.',
+    detail:
+      '내가 먼저 건넨 따뜻한 눈빛과 미소가 배가 되어 돌아오는 날입니다. 소중한 사람과 함께 산책하거나 작은 선물을 나누면 막혔던 관계도 봄눈 녹듯 풀려나갑니다.',
+    luckyItem: '붉은 팥 디저트 · 분홍빛 키링',
+    luckyPlace: '황리단길 산책로 · 아늑한 카페',
+    bgColor: '#fdf2f8',
+    accentColor: '#be185d',
+  },
+  peony: {
+    title: '부귀영화(富貴榮華) · 모란화의 날',
+    hanja: '富貴大吉',
+    summary: '풍요와 성취의 기운이 머리 위에 가득 차올라 하는 일마다 빛이 납니다.',
+    detail:
+      '오랫동안 공들여온 일에서 마침내 탐스러운 결실이 맺히는 운수 대통의 날입니다. 자신감을 가지고 원하는 바를 추진하면 기대 이상의 성과를 거두게 됩니다.',
+    luckyItem: '황금빛 장식 · 동전 지갑',
+    luckyPlace: '활기찬 상점가 · 복쓸싸리 쇼룸',
+    bgColor: '#fff1f2',
+    accentColor: '#b91c1c',
+  },
+  gold_plum: {
+    title: '지혜광명(智慧光明) · 황매화의 날',
+    hanja: '智慧亨通',
+    summary: '막혔던 생각을 뚫어주는 반짝이는 영감과 재복이 함께 깃듭니다.',
+    detail:
+      '어려운 문제 앞에서도 명쾌한 해답이 떠오르는 총명한 하루입니다. 새로운 계획을 세우거나 중요한 결정을 내리기에 더없이 좋은 길일(吉日)입니다.',
+    luckyItem: '노란색 메모지 · 달콤한 간식',
+    luckyPlace: '햇살이 잘 드는 창가 · 서점',
+    bgColor: '#fefce8',
+    accentColor: '#b45309',
+  },
+  blue_bosang: {
+    title: '신묘제액(神妙除厄) · 청보상화의 날',
+    hanja: '除厄招福',
+    summary: '나쁜 액운은 멀리 물러가고 신비로운 수호 기운이 하루를 지켜줍니다.',
+    detail:
+      '복쓸싸리의 강력한 액막이 결계가 당신의 오늘을 감싸고 있습니다. 작은 실수나 방해에도 흔들리지 않고 전화위복의 기회를 잡게 되는 특별한 날입니다.',
+    luckyItem: '액막이 팥 주머니 · 푸른색 소품',
+    luckyPlace: '탁 트인 공원 · 바람이 부는 언덕',
+    bgColor: '#f0f9ff',
+    accentColor: '#1d4ed8',
+  },
+};
+
+// O2O 오프라인 매장 / 실물 굿즈 연동 프로토타입 코드 목록
+export const O2O_REWARD_CODES: Record<
+  string,
+  { title: string; karma: number; beans: number; badge: string }
+> = {
+  황리단길: {
+    title: '🏮 황리단길 복쓸싸리 성지 방문 인증',
+    karma: 30,
+    beans: 5,
+    badge: '👑 성지순례 금관',
+  },
+  팥키링: {
+    title: '🫘 경주 붉은팥 액막이 키링 소장 인증',
+    karma: 35,
+    beans: 8,
+    badge: '🧿 액막이 수호자',
+  },
+  복쓸싸리: {
+    title: '🐾 복쓸싸리 스페셜 프렌즈 기프트',
+    karma: 30,
+    beans: 5,
+    badge: '✨ 복쓸 프렌즈',
+  },
+};
+
 export interface WishSealInfo {
   id: WishSealId;
   icon: string;
@@ -74,7 +191,6 @@ export const WISH_SEALS: WishSealInfo[] = [
   },
 ];
 
-// Phase 4: 내 동산 조경 커스텀 카탈로그 (공덕 + 붉은 팥 교환소)
 export interface GardenCatalogItem {
   id: GardenItemId;
   name: string;
@@ -160,28 +276,6 @@ export const BLESS_STAMPS = [
   { icon: '🍀', name: '만복의 기운' },
 ];
 
-export const KARMA_THRESHOLDS = {
-  SPROUT: 10,
-  BUD: 30,
-  BLOOM: 60,
-};
-
-export const FLOWER_TYPES: FlowerType[] = [
-  'white_lotus',
-  'pink_lotus',
-  'peony',
-  'gold_plum',
-  'blue_bosang',
-];
-
-export const FLOWER_NAMES: Record<FlowerType, string> = {
-  white_lotus: '🪷 백련화',
-  pink_lotus: '🌸 홍련화',
-  peony: '🌺 모란화',
-  gold_plum: '🌼 황매화',
-  blue_bosang: '💠 청보상화',
-};
-
 export const RANDOM_COLORS = [
   '#e53935',
   '#fb8c00',
@@ -199,35 +293,21 @@ export const ORB_PALETTE = [
   '#e040fb',
 ];
 
+// [진단사항 1 반영] 처음에는 구슬 1개만 나와 있고, 나머지 2개는 액운을 쓸어 정화할 때 그 자리에서 드랍됨!
 export const generateScatteredOrbs = (): RollingOrb[] => {
   const palette = [...ORB_PALETTE].sort(() => Math.random() - 0.5);
-  const baseSectorAngle = Math.random() * Math.PI * 2;
-
-  return [0, 1, 2].map((idx) => {
-    const angle =
-      baseSectorAngle +
-      idx * ((Math.PI * 2) / 3) +
-      (Math.random() - 0.5) * 0.7;
-    const radius = 6.5 + Math.random() * 9.5;
-    const x = Math.cos(angle) * radius;
-    let z = Math.sin(angle) * radius;
-
-    if (Math.hypot(x - 0, z - 6.0) < 3.5) {
-      z += 4.5;
-    }
-
-    return {
-      id: idx + 1,
-      x: Number(x.toFixed(2)),
-      z: Number(z.toFixed(2)),
-      vx: 0,
-      vz: 0,
-      color: palette[idx],
-      collected: false,
-      ownerId: null,
-      updatedAt: Date.now(),
-    };
-  });
+  return [0, 1, 2].map((idx) => ({
+    id: idx + 1,
+    x: idx === 0 ? -4.2 : idx === 1 ? 5.2 : 0.5,
+    z: idx === 0 ? 8.8 : idx === 1 ? 9.2 : 12.5,
+    vx: 0,
+    vz: 0,
+    color: palette[idx],
+    // 첫 번째 구슬만 필드에 나와있고, 나머지 2개는 액운을 잡으면 스폰되도록 대기(collected: true 상태 응용)
+    collected: idx > 0,
+    ownerId: null,
+    updatedAt: Date.now(),
+  }));
 };
 
 export const generateInitialSpirits = (): MisfortuneSpirit[] => {
@@ -246,7 +326,6 @@ export const generateInitialSpirits = (): MisfortuneSpirit[] => {
   });
 };
 
-// Phase 4: 당산나무 앞마당을 위협하는 거대 먹구름 대액운(Boss) 생성
 export const generateBossSpirit = (): MisfortuneSpirit => {
   const angle = (Math.random() - 0.5) * 1.4;
   const radius = 9.0 + Math.random() * 3.0;

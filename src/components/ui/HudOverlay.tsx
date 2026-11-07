@@ -11,6 +11,7 @@ import {
   Home,
   Globe,
   Store,
+  Gift,
   X,
 } from 'lucide-react';
 import type {
@@ -30,7 +31,6 @@ import {
   type GardenCatalogItem,
 } from '../../utils/constants';
 import { getGrowthStage } from '../../hooks/useGameProgress';
-import { VirtualJoystick } from './VirtualJoystick';
 
 interface HudOverlayProps {
   zoneMode: ZoneMode;
@@ -53,11 +53,10 @@ interface HudOverlayProps {
   isNearTree: boolean;
   myAction: PlayerAction;
   onTriggerAction: (action: PlayerAction, label: string) => void;
-  onSweepAction: () => void;
-  onThrowRedBean: () => void;
+  onSmartPurifyAction: () => void;
   onOpenWriteModal: () => void;
-  onJoystickMove: (vec: { x: number; y: number }) => void;
-  onJoystickDragChange: (dragging: boolean) => void;
+  onOpenFortuneModal: () => void;
+  onOpenO2OModal: () => void;
   isProfileModalOpen: boolean;
   setIsProfileModalOpen: (open: boolean) => void;
   isGardenShopOpen: boolean;
@@ -101,11 +100,10 @@ export const HudOverlay = ({
   isNearTree,
   myAction,
   onTriggerAction,
-  onSweepAction,
-  onThrowRedBean,
+  onSmartPurifyAction,
   onOpenWriteModal,
-  onJoystickMove,
-  onJoystickDragChange,
+  onOpenFortuneModal,
+  onOpenO2OModal,
   isProfileModalOpen,
   setIsProfileModalOpen,
   isGardenShopOpen,
@@ -129,12 +127,17 @@ export const HudOverlay = ({
 }: HudOverlayProps) => {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const stage = getGrowthStage(myKarma);
-  const stageLabels = ['🌰 씨앗', '🌱 새싹', '🌷 봉오리', '🪷 만개'];
+  const isBloomed = stage === 3;
+  const stageLabels = ['🌰 씨앗', '🌱 새싹', '🌷 봉오리', '🪷 오늘 만개!'];
 
   const handleActionClick = (action: PlayerAction, label: string) => {
     setIsActionMenuOpen(false);
     onTriggerAction(action, label);
   };
+
+  // [진단사항 2 반영] 대액운이 있거나 팥이 있을 때 하나의 스마트 정화 버튼으로 통합 표시
+  const canUseRedBeanBoost =
+    zoneMode === 'public' && Boolean(activeBoss) && myRedBeans > 0;
 
   return (
     <>
@@ -224,17 +227,19 @@ export const HudOverlay = ({
             <span className="hidden sm:inline">산책</span>
           </button>
 
-          <button
-            onClick={() => onSelectCameraMode('tree')}
-            className={`h-8 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
-              cameraMode === 'tree' && !hasFocusedTarget
-                ? 'bg-lime-800 text-white shadow'
-                : 'text-stone-700 hover:bg-stone-200/70'
-            }`}
-          >
-            <span>🌳</span>
-            <span>{hangingCount}</span>
-          </button>
+          {zoneMode === 'public' && (
+            <button
+              onClick={() => onSelectCameraMode('tree')}
+              className={`h-8 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
+                cameraMode === 'tree' && !hasFocusedTarget
+                  ? 'bg-lime-800 text-white shadow'
+                  : 'text-stone-700 hover:bg-stone-200/70'
+              }`}
+            >
+              <span>🌳</span>
+              <span>{hangingCount}</span>
+            </button>
+          )}
 
           <button
             onClick={() => onSelectCameraMode('sky')}
@@ -260,7 +265,7 @@ export const HudOverlay = ({
         </div>
       </header>
 
-      {/* --- [Phase 4] 거대 대액운 출현 시 상단 협동 레이드 게이지 바 --- */}
+      {/* --- 거대 대액운 출현 시 상단 협동 레이드 게이지 바 --- */}
       {zoneMode === 'public' && activeBoss && !isAnyModalOpen && (
         <div className="absolute top-15 left-4 right-4 z-20 flex justify-center pointer-events-none">
           <div className="bg-red-950/90 backdrop-blur-md border border-red-400/70 px-4 py-1.5 rounded-2xl shadow-xl flex items-center gap-3 w-full max-w-xs">
@@ -313,15 +318,38 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 하단 조이스틱 & 액션 버튼 --- */}
-      <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
-        <div className="pointer-events-auto">
-          <VirtualJoystick
-            onDragChange={onJoystickDragChange}
-            onMove={onJoystickMove}
-          />
+      {/* --- 하단 바: 좌측 [오늘의 운세 부적 & O2O 코드] / 우측 [스마트 정화·표현·기원] --- */}
+      <div className="absolute bottom-4 left-3 right-3 z-20 flex items-end justify-between pointer-events-none">
+        {/* 좌측 하단: 조이스틱을 제거한 자리에 들어선 오늘의 보상화 운세 부적 & O2O 연동 버튼 */}
+        <div className="pointer-events-auto flex items-center gap-1.5">
+          <button
+            onClick={onOpenFortuneModal}
+            className={`h-11 px-3.5 rounded-full font-extrabold text-xs shadow-xl flex items-center gap-1.5 transition transform active:scale-95 border-2 ${
+              isBloomed
+                ? 'bg-gradient-to-r from-amber-300 via-yellow-300 to-amber-400 text-stone-950 border-white ring-2 ring-amber-300/70 animate-pulse'
+                : 'bg-[#fcf9f2]/95 text-stone-800 border-stone-300'
+            }`}
+            title="오늘의 보상화 운세 및 부적 카드 발급"
+          >
+            <span>{isBloomed ? '🪷' : '🌷'}</span>
+            <span>
+              {isBloomed
+                ? '오늘의 운세 부적!'
+                : `운세 개화 (${myKarma}/${KARMA_THRESHOLDS.BLOOM})`}
+            </span>
+          </button>
+
+          <button
+            onClick={onOpenO2OModal}
+            className="h-11 px-3 rounded-full bg-stone-900/90 hover:bg-stone-800 text-amber-200 font-extrabold text-xs shadow-xl border border-amber-400/50 flex items-center gap-1 transition transform active:scale-95"
+            title="오프라인 매장 및 실물 굿즈 코드 등록"
+          >
+            <Gift className="w-3.5 h-3.5 text-amber-300 shrink-0" />
+            <span className="hidden sm:inline">O2O 코드</span>
+          </button>
         </div>
 
+        {/* 우측 하단: 액션 메뉴 및 스마트 원버튼 */}
         <div className="pointer-events-auto flex flex-col items-end gap-2">
           {isActionMenuOpen && (
             <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-2.5 rounded-3xl shadow-2xl border-2 border-amber-900/20 w-[250px] space-y-2">
@@ -383,35 +411,27 @@ export const HudOverlay = ({
           )}
 
           <div className="flex items-center gap-1.5">
-            {/* 광장: 붉은 팥 투척 버튼 / 내 동산: 조경 도감(교환소) 버튼 */}
-            {zoneMode === 'public' ? (
-              myRedBeans > 0 && (
-                <button
-                  onClick={onThrowRedBean}
-                  className="h-11 px-3 rounded-full bg-red-900 hover:bg-red-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-400/60 flex items-center gap-1 transition transform active:scale-95"
-                  title="붉은 팥 1알을 뿌려 액운을 강력하게 정화합니다"
-                >
-                  <span>🫘</span>
-                  <span className="hidden sm:inline">팥 뿌리기</span>
-                </button>
-              )
-            ) : (
+            {zoneMode === 'my_garden' && (
               <button
                 onClick={() => setIsGardenShopOpen(true)}
                 className="h-11 px-3.5 rounded-full bg-amber-900 hover:bg-amber-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-300/60 flex items-center gap-1 transition transform active:scale-95"
-                title="모은 공덕과 팥으로 내 동산 꾸미기"
               >
                 <Store className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                 <span>조경 도감</span>
               </button>
             )}
 
+            {/* [진단사항 2 반영] 하나로 통합된 스마트 정화(쓸기/팥액막이) 버튼 */}
             <button
-              onClick={onSweepAction}
-              className="h-11 px-3.5 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs shadow-xl border-2 border-white flex items-center gap-1 transition transform active:scale-95"
+              onClick={onSmartPurifyAction}
+              className={`h-11 px-3.5 rounded-full font-extrabold text-xs shadow-xl border-2 flex items-center gap-1 transition transform active:scale-95 ${
+                canUseRedBeanBoost
+                  ? 'bg-red-800 hover:bg-red-700 text-amber-100 border-amber-300 animate-bounce'
+                  : 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white'
+              }`}
             >
-              <span>🧹</span>
-              <span>쓸기</span>
+              <span>{canUseRedBeanBoost ? '🫘' : '🧹'}</span>
+              <span>{canUseRedBeanBoost ? '팥 액막이!' : '쓸기'}</span>
             </button>
 
             <button
@@ -422,22 +442,24 @@ export const HudOverlay = ({
               <span>표현</span>
             </button>
 
-            <button
-              onClick={onOpenWriteModal}
-              className={`h-11 px-3.5 md:px-5 rounded-full font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border ${
-                isNearTree
-                  ? 'bg-red-700 hover:bg-red-600 text-amber-100 border-amber-300 ring-4 ring-amber-300/50 animate-pulse'
-                  : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'
-              }`}
-            >
-              <ScrollText className="w-4 h-4 shrink-0" />
-              <span>기원 인장</span>
-            </button>
+            {zoneMode === 'public' && (
+              <button
+                onClick={onOpenWriteModal}
+                className={`h-11 px-3.5 md:px-4 rounded-full font-extrabold text-xs shadow-2xl flex items-center gap-1 transition transform active:scale-95 border ${
+                  isNearTree
+                    ? 'bg-red-700 hover:bg-red-600 text-amber-100 border-amber-300 ring-4 ring-amber-300/50 animate-pulse'
+                    : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'
+                }`}
+              >
+                <ScrollText className="w-4 h-4 shrink-0" />
+                <span>기원</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* --- [Phase 4 핵심] 내 동산 조경 도감 (공덕·팥 교환소) 모달 --- */}
+      {/* --- 내 동산 조경 도감 모달 --- */}
       {isGardenShopOpen && (
         <div
           onClick={() => setIsGardenShopOpen(false)}
@@ -555,23 +577,16 @@ export const HudOverlay = ({
 
             <div className="bg-amber-100/80 border border-amber-900/15 rounded-2xl p-3 space-y-1.5">
               <div className="flex items-center justify-between text-xs font-extrabold text-amber-950">
-                <span>운명의 보상화: {FLOWER_NAMES[myFlowerType]}</span>
+                <span>오늘의 수호꽃: {FLOWER_NAMES[myFlowerType]}</span>
                 <span className="px-2 py-0.5 bg-amber-300 rounded-full text-[10px]">
                   {stageLabels[stage]}
                 </span>
               </div>
               <p className="text-[11px] text-stone-700 font-bold">
-                보유 공덕: 🔮 {myKarma}점 · 붉은 팥: 🫘 {myRedBeans}알
+                오늘의 공덕: 🔮 {myKarma}점 · 붉은 팥: 🫘 {myRedBeans}알
               </p>
               <p className="text-[10px] text-stone-600">
-                {stage === 0 &&
-                  `🌱 새싹 개화까지 공덕 ${KARMA_THRESHOLDS.SPROUT - myKarma}점 남음`}
-                {stage === 1 &&
-                  `🌷 꽃봉오리까지 공덕 ${KARMA_THRESHOLDS.BUD - myKarma}점 남음`}
-                {stage === 2 &&
-                  `🪷 보상화 만개 & 황금 후광까지 공덕 ${KARMA_THRESHOLDS.BLOOM - myKarma}점 남음`}
-                {stage === 3 &&
-                  `✨ 최고 경지 달성! 머리 위에 보상화와 황금 후광이 빛납니다!`}
+                ※ 보상화는 매일 자정 새로 피어나며, 공덕 {KARMA_THRESHOLDS.BLOOM}점 달성 시 오늘의 운세 부적을 발급받을 수 있습니다.
               </p>
             </div>
 
