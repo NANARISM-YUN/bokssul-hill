@@ -6,12 +6,14 @@ import {
   Compass,
   Smile,
   Footprints,
+  PartyPopper,
 } from 'lucide-react';
 import type { CameraMode, PlayerAction, FlowerType } from '../../types/wish';
 import {
   RANDOM_COLORS,
   FLOWER_NAMES,
   KARMA_THRESHOLDS,
+  QUICK_EMOTES,
 } from '../../utils/constants';
 import { getGrowthStage } from '../../hooks/useGameProgress';
 import { VirtualJoystick } from './VirtualJoystick';
@@ -46,6 +48,11 @@ interface HudOverlayProps {
   myKarma: number;
   myRedBeans: number;
   myFlowerType: FlowerType;
+  autoWatchAscension: boolean;
+  setAutoWatchAscension: (val: boolean) => void;
+  ascendingWishNickname: string | null;
+  onCelebrateAscension: () => void;
+  onExitAscensionView: () => void;
   onSaveProfile: (e: React.FormEvent) => void;
 }
 
@@ -79,6 +86,11 @@ export const HudOverlay = ({
   myKarma,
   myRedBeans,
   myFlowerType,
+  autoWatchAscension,
+  setAutoWatchAscension,
+  ascendingWishNickname,
+  onCelebrateAscension,
+  onExitAscensionView,
   onSaveProfile,
 }: HudOverlayProps) => {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
@@ -98,7 +110,7 @@ export const HudOverlay = ({
           <button
             onClick={() => setIsProfileModalOpen(true)}
             className="h-10 bg-[#fcf9f2]/95 hover:bg-white backdrop-blur-md pl-2 pr-3 rounded-full shadow-lg border border-amber-900/15 flex items-center gap-2 transition active:scale-95"
-            title="내 복쓸덩이 & 보상화 정보"
+            title="내 복쓸덩이 & 설정"
           >
             <div className="w-6 h-6 rounded-full bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-[11px] shadow-inner">
               福
@@ -108,7 +120,6 @@ export const HudOverlay = ({
               {totalOnlineCount}
             </span>
             <span className="w-px h-3 bg-stone-300" />
-            {/* 내 공덕(🔮) & 팥(🫘) 표시 */}
             <span className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1">
               <span>🔮 {myKarma}</span>
               <span className="text-stone-300">·</span>
@@ -192,7 +203,28 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 하단 조이스틱 & 싸리빗자루 쓸기 & 몸짓 & 소원지 버튼 --- */}
+      {/* --- ⭐ 누군가의 소원이 별로 승천할 때 뜨는 합동 축하 & 자유 이탈 바 --- */}
+      {ascendingWishNickname && !isAnyModalOpen && (
+        <div className="absolute bottom-20 left-4 right-4 z-30 flex justify-center pointer-events-none">
+          <div className="bg-indigo-950/90 backdrop-blur-md border-2 border-amber-300/80 rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
+            <button
+              onClick={onCelebrateAscension}
+              className="px-3.5 py-2 rounded-xl bg-amber-400 hover:bg-amber-300 text-stone-950 text-xs font-black flex items-center gap-1.5 shadow animate-bounce"
+            >
+              <PartyPopper className="w-4 h-4" />
+              <span>🎉 {ascendingWishNickname}님 별 축하 쏘기! (🔮+1)</span>
+            </button>
+            <button
+              onClick={onExitAscensionView}
+              className="px-2.5 py-2 rounded-xl bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold whitespace-nowrap"
+            >
+              내 시점 복귀
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* --- 하단 조이스틱 & 싸리빗자루 쓸기 & 무언 감정/몸짓 팔레트 & 소원 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
@@ -202,50 +234,71 @@ export const HudOverlay = ({
         </div>
 
         <div className="pointer-events-auto flex flex-col items-end gap-2">
+          {/* 4대 몸짓 + 8종 이모티콘 통합 무언(Zero-Text) 팔레트 */}
           {isActionMenuOpen && (
-            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-1.5 rounded-2xl shadow-2xl border border-amber-900/20 flex items-center gap-1">
-              <button
-                onClick={() => handleActionClick('jump', '🙌 만세 점프!')}
-                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
-              >
-                🙌 점프
-              </button>
-              <button
-                onClick={() => handleActionClick('roll', '🌀 데구르르!')}
-                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
-              >
-                🌀 구르기
-              </button>
-              <button
-                onClick={() => handleActionClick('bow', '🙇 복 받으시개!')}
-                className="px-2.5 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[11px] font-extrabold transition"
-              >
-                🙇 절하기
-              </button>
-              <button
-                onClick={() =>
-                  handleActionClick(
-                    myAction === 'sit' ? 'idle' : 'sit',
-                    myAction === 'sit' ? '🐾 산책 출발!' : '🍞 식빵 굽는 중...'
-                  )
-                }
-                className={`px-2.5 py-2 rounded-xl text-[11px] font-extrabold transition ${
-                  myAction === 'sit'
-                    ? 'bg-lime-800 text-white'
-                    : 'bg-amber-100 hover:bg-amber-200 text-stone-900'
-                }`}
-              >
-                🍞 앉기
-              </button>
+            <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-2.5 rounded-3xl shadow-2xl border-2 border-amber-900/20 w-[250px] space-y-2">
+              <div className="text-[10px] font-extrabold text-stone-500 px-1">
+                온몸으로 표현하기 (몸짓 4종)
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                <button
+                  onClick={() => handleActionClick('jump', '🙌 만세!')}
+                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                >
+                  🙌 점프
+                </button>
+                <button
+                  onClick={() => handleActionClick('roll', '🌀 데구르르!')}
+                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                >
+                  🌀 구르기
+                </button>
+                <button
+                  onClick={() => handleActionClick('bow', '🙇 복 받으시개!')}
+                  className="py-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-stone-900 text-[10px] font-extrabold"
+                >
+                  🙇 절하기
+                </button>
+                <button
+                  onClick={() =>
+                    handleActionClick(
+                      myAction === 'sit' ? 'idle' : 'sit',
+                      myAction === 'sit' ? '🐾 출발!' : '🍞 식빵 굽기'
+                    )
+                  }
+                  className={`py-1.5 rounded-xl text-[10px] font-extrabold ${
+                    myAction === 'sit'
+                      ? 'bg-lime-800 text-white'
+                      : 'bg-amber-100 hover:bg-amber-200 text-stone-900'
+                  }`}
+                >
+                  🍞 앉기
+                </button>
+              </div>
+
+              <div className="text-[10px] font-extrabold text-stone-500 px-1 pt-1 border-t border-stone-200">
+                마음 이모티콘 (8종)
+              </div>
+              <div className="grid grid-cols-4 gap-1">
+                {QUICK_EMOTES.map((em) => (
+                  <button
+                    key={em.icon}
+                    onClick={() => handleActionClick('idle', em.label)}
+                    className="py-1.5 rounded-xl bg-white hover:bg-stone-100 border border-stone-200 text-base shadow-sm active:scale-90 transition"
+                    title={em.label}
+                  >
+                    {em.icon}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           <div className="flex items-center gap-1.5">
-            {/* 싸리빗자루 액운 쓸기 버튼 */}
             <button
               onClick={onSweepAction}
               className="h-11 px-3.5 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs shadow-xl border-2 border-white flex items-center gap-1 transition transform active:scale-95"
-              title="싸리빗자루로 주변 액운 쓸어내기"
+              title="싸리빗자루로 액운 쓸어내기"
             >
               <span>🧹</span>
               <span>쓸기</span>
@@ -256,7 +309,7 @@ export const HudOverlay = ({
               className="h-11 px-3 rounded-full bg-[#fcf9f2]/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 transition transform active:scale-95"
             >
               <Smile className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>몸짓</span>
+              <span>표현</span>
             </button>
 
             <button
@@ -268,13 +321,13 @@ export const HudOverlay = ({
               }`}
             >
               <ScrollText className="w-4 h-4 shrink-0" />
-              <span>소원</span>
+              <span>기원 인장</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* --- 내 복쓸덩이 프로필 & 보상화 성장 모달 --- */}
+      {/* --- 내 복쓸덩이 프로필 & 보상화 & 별 승천 연출 ON/OFF 설정 모달 --- */}
       {isProfileModalOpen && (
         <div
           onClick={() => setIsProfileModalOpen(false)}
@@ -287,20 +340,19 @@ export const HudOverlay = ({
           >
             <div className="flex items-center justify-between border-b border-amber-900/15 pb-2.5">
               <h3 className="text-sm font-extrabold text-stone-900">
-                🐾 내 복쓸덩이 & 보상화 ({totalOnlineCount}명 산책 중)
+                🐾 내 복쓸덩이 & 환경 설정
               </h3>
             </div>
 
-            {/* 내 보상화 개화 현황 카드 */}
             <div className="bg-amber-100/80 border border-amber-900/15 rounded-2xl p-3 space-y-1.5">
               <div className="flex items-center justify-between text-xs font-extrabold text-amber-950">
-                <span>내 운명의 꽃: {FLOWER_NAMES[myFlowerType]}</span>
+                <span>운명의 보상화: {FLOWER_NAMES[myFlowerType]}</span>
                 <span className="px-2 py-0.5 bg-amber-300 rounded-full text-[10px]">
                   {stageLabels[stage]}
                 </span>
               </div>
               <p className="text-[11px] text-stone-700 font-bold">
-                현재 공덕: 🔮 {myKarma}점 · 보유 팥: 🫘 {myRedBeans}알
+                보유 공덕: 🔮 {myKarma}점 · 붉은 팥: 🫘 {myRedBeans}알
               </p>
               <p className="text-[10px] text-stone-600">
                 {stage === 0 &&
@@ -347,6 +399,26 @@ export const HudOverlay = ({
                   />
                 ))}
               </div>
+            </div>
+
+            {/* 타인의 별 승천 연출 자동 보기 ON/OFF 스위치 */}
+            <div className="bg-white/80 p-3 rounded-2xl border border-stone-200">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div>
+                  <div className="text-xs font-extrabold text-stone-800">
+                    🌟 별 승천 연출 함께 보기
+                  </div>
+                  <div className="text-[10px] text-stone-500">
+                    이웃의 소원이 별이 될 때 시점을 자동으로 비춥니다
+                  </div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={autoWatchAscension}
+                  onChange={(e) => setAutoWatchAscension(e.target.checked)}
+                  className="w-5 h-5 accent-lime-800 rounded cursor-pointer"
+                />
+              </label>
             </div>
 
             <button

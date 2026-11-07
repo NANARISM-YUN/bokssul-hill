@@ -10,12 +10,17 @@ import type {
   PlayerAction,
   RollingOrb,
   MisfortuneSpirit,
+  WishSealId,
 } from './types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './utils/terrain';
 import {
   TARGET_BLESSINGS,
   RANDOM_COLORS,
   INITIAL_WISHES,
+  WISH_SEALS,
+  WISH_KARMA_COST,
+  WISH_BEAN_KARMA_COST,
+  BLESS_KARMA_COST,
   generateScatteredOrbs,
   generateInitialSpirits,
 } from './utils/constants';
@@ -39,7 +44,8 @@ import { HudOverlay } from './components/ui/HudOverlay';
 import { WishWriteModal, WishDetailModal } from './components/ui/WishModals';
 
 export default function App() {
-  const { karma, addKarma, redBeans, flowerType } = useGameProgress();
+  const { karma, addKarma, redBeans, addRedBeans, flowerType } =
+    useGameProgress();
 
   const [myNickname, setMyNickname] = useState<string>(
     () =>
@@ -55,6 +61,14 @@ export default function App() {
   const [myEmote, setMyEmote] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isJoystickDragging, setIsJoystickDragging] = useState(false);
+
+  // 타인의 별 승천 연출 자동 보기 ON/OFF 설정
+  const [autoWatchAscension, setAutoWatchAscension] = useState<boolean>(() => {
+    return localStorage.getItem('bokssul_autowatch') !== 'false';
+  });
+  const [ascendingWishNickname, setAscendingWishNickname] = useState<
+    string | null
+  >(null);
 
   const [clickTarget, setClickTarget] = useState<{ x: number; z: number } | null>(
     null
@@ -87,19 +101,13 @@ export default function App() {
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
 
-  const [nickname, setNickname] = useState(myNickname);
-  const [content, setContent] = useState('');
-  const [pouchColor, setPouchColor] = useState('#e53935');
-  const [blessingAuthor, setBlessingAuthor] = useState(myNickname);
-  const [blessingComment, setBlessingComment] = useState('');
-
   const [cameraMode, setCameraMode] = useState<CameraMode>('follow');
   const [focusedTarget, setFocusedTarget] = useState<
     [number, number, number] | null
   >(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(
-    '🧹 싸리빗자루로 액운을 쓸거나 복구슬을 바구니에 모아 공덕(🔮)을 쌓아보세요!'
+    '🧹 싸리빗자루로 액운을 쓸거나 복구슬을 모아 기원 인장을 올려보세요!'
   );
 
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -115,10 +123,14 @@ export default function App() {
   const triggerMeteorFestival = useCallback(() => {
     setMeteorActive(true);
     setIsNightMode(true);
-    setCameraMode('sky');
-    setFocusedTarget(null);
+    if (autoWatchAscension) {
+      setCameraMode('sky');
+      setFocusedTarget(null);
+    }
     addKarma(5);
-    setBannerMessage('🌠 별똥별 축제 발동! 동산의 모든 복쓸덩이가 공덕 +5점을 받았습니다!');
+    setBannerMessage(
+      '🌠 별똥별 축제 발동! 동산의 모든 복쓸덩이가 공덕 +5점을 받았습니다!'
+    );
 
     setTimeout(() => {
       setMeteorActive(false);
@@ -127,7 +139,23 @@ export default function App() {
       setCollectedCount(0);
       setBannerMessage('🔮 동산 곳곳에 새로운 오색 복구슬들이 나타났습니다!');
     }, 10000);
-  }, [addKarma]);
+  }, [addKarma, autoWatchAscension]);
+
+  // 다른 유저가 별을 띄웠을 때 자동 감상 처리 (설정이 ON일 때만 시점 전환)
+  const handleRemoteAscension = useCallback(
+    (ascendNick: string) => {
+      setAscendingWishNickname(ascendNick);
+      if (autoWatchAscension) {
+        setIsNightMode(true);
+        setCameraMode('sky');
+        setFocusedTarget(null);
+      }
+      setTimeout(() => {
+        setAscendingWishNickname(null);
+      }, 4500);
+    },
+    [autoWatchAscension]
+  );
 
   const {
     myId,
@@ -150,6 +178,7 @@ export default function App() {
     setSpirits,
     setCollectedCount,
     onMeteorTriggered: triggerMeteorFestival,
+    onRemoteAscension: handleRemoteAscension,
     setWishes,
     setBannerMessage,
     setIsNightMode,
@@ -181,7 +210,6 @@ export default function App() {
     [karma, addKarma, broadcastAction]
   );
 
-  // 싸리빗자루로 액운 쓸어내기 처리
   const handleSweepSpirits = useCallback(
     (targetSpiritId?: string) => {
       const pPos = playerPosRef.current;
@@ -192,7 +220,6 @@ export default function App() {
         .map((sp) => {
           const dist = Math.hypot(sp.x - pPos.x, sp.z - pPos.z);
           if (sp.id === targetSpiritId && dist > 3.2) {
-            // 멀리 있는 액운을 터치했으면 그 액운 앞으로 먼저 걸어가게 유도
             setClickTarget({ x: sp.x, z: sp.z });
             return sp;
           }
@@ -209,7 +236,6 @@ export default function App() {
         })
         .filter(Boolean) as MisfortuneSpirit[];
 
-      // 액운이 모두 정화되면 새 액운 리스폰 예약
       if (updated.length < 2) {
         const extra = generateInitialSpirits()[0];
         updated.push(extra);
@@ -278,31 +304,48 @@ export default function App() {
     };
   }, [isAnyModalOpen]);
 
-  const handleAddWish = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nickname.trim() || !content.trim()) return;
+  // [Phase 2 핵심] 무언의 6대 기원 문양으로 소원 걸기
+  const handleCreateSealWish = (
+    sealId: WishSealId,
+    useRedBean: boolean,
+    color: string
+  ) => {
+    const cost = useRedBean ? WISH_BEAN_KARMA_COST : WISH_KARMA_COST;
+    if (karma < cost || (useRedBean && redBeans < 1)) return;
 
+    addKarma(-cost);
+    if (useRedBean) addRedBeans(-1);
+
+    const sealInfo = WISH_SEALS.find((s) => s.id === sealId) || WISH_SEALS[0];
     const branchIdx = wishes.length % BRANCH_POSITIONS.length;
     const starIdx = wishes.length % STAR_POSITIONS.length;
 
+    const initialBlessings: Blessing[] = useRedBean
+      ? [
+          { id: `bean_1_${Date.now()}`, author: '붉은팥액막이', stamp: '🫘', time: '방금 전' },
+          { id: `bean_2_${Date.now()}`, author: '수호신복쓸싸리', stamp: '✨', time: '방금 전' },
+        ]
+      : [];
+
     const newWish: Wish = {
       id: Date.now().toString(),
-      nickname: nickname.trim(),
-      content: content.trim(),
+      nickname: myNickname,
+      sealId,
+      content: `${sealInfo.icon} ${sealInfo.title}`,
       isMine: true,
+      isGoldenBean: useRedBean,
       hasMyBlessing: false,
-      blessings: [],
+      blessings: initialBlessings,
       targetBlessings: TARGET_BLESSINGS,
       status: 'hanging',
       branchPos: BRANCH_POSITIONS[branchIdx],
       starPos: STAR_POSITIONS[starIdx],
-      color: pouchColor,
+      color,
     };
 
     const nextWishes = [...wishes, newWish];
-    const msg = `👑 '${newWish.nickname}'님의 소원지가 당산나무에 걸렸습니다!`;
+    const msg = `👑 '${myNickname}'님이 [${sealInfo.icon}${sealInfo.title}] 기원 복주머니를 올렸습니다!`;
     setWishes(nextWishes);
-    setContent('');
     setIsWriteModalOpen(false);
     setCameraMode('tree');
     setFocusedTarget(newWish.branchPos);
@@ -310,15 +353,17 @@ export default function App() {
     broadcastWishes(nextWishes, msg);
   };
 
-  const handleAddBlessing = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedWish || !blessingComment.trim()) return;
+  // [Phase 2 핵심] 텍스트 없이 응원 스탬프 + 공덕 불어넣기 (보시 보너스)
+  const handleSendBlessStamp = (stampIcon: string) => {
+    if (!selectedWish || karma < BLESS_KARMA_COST) return;
 
-    const authorName = blessingAuthor.trim() || myNickname || '익명의 복쓸덩이';
+    // 내 공덕 2점을 소원에 넣으면 보시(布施)의 공덕으로 +3점을 돌려받아 순증가(+1) 및 꽃 개화 촉진!
+    addKarma(-BLESS_KARMA_COST + 3);
+
     const newBlessing: Blessing = {
       id: Date.now().toString(),
-      author: authorName,
-      comment: blessingComment.trim(),
+      author: myNickname,
+      stamp: stampIcon,
       time: '방금 전',
     };
 
@@ -330,14 +375,13 @@ export default function App() {
     );
 
     setWishes(nextWishes);
-    setBlessingComment('');
-    addKarma(2);
+    handleTriggerAction('bow', `${stampIcon} 보시 공덕 달성! (🌸보상화 기운 상승)`);
 
-    let msg: string | undefined;
+    let msg = `${stampIcon} '${myNickname}'님이 '${selectedWish.nickname}'님의 기원에 복기운을 불어넣었습니다!`;
     if (nextBlessings.length >= selectedWish.targetBlessings) {
-      msg = `✨ 지성이면 감천! '${selectedWish.nickname}'님의 소원에 복 기운이 가득 찼습니다!`;
-      setBannerMessage(msg);
+      msg = `✨ 지성이면 감천! '${selectedWish.nickname}'님의 기원에 복 기운이 가득 찼습니다!`;
     }
+    setBannerMessage(msg);
     broadcastWishes(nextWishes, msg);
   };
 
@@ -349,37 +393,39 @@ export default function App() {
     setIsNightMode(true);
     setCameraMode('sky');
     setFocusedTarget(null);
-    const msg = `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 소원이 별로 승천합니다!`;
+    setAscendingWishNickname(target.nickname);
+
+    const msg = `🌌 정성이 하늘에 닿아 '${target.nickname}'님의 기원이 밤하늘의 별로 승천합니다!`;
     setBannerMessage(msg);
 
     const ascendingWishes = wishes.map((w) =>
       w.id === wishId ? { ...w, status: 'ascending' as const } : w
     );
     setWishes(ascendingWishes);
-    broadcastWishes(ascendingWishes, msg, true);
+    broadcastWishes(ascendingWishes, msg, true, target.nickname);
 
     setTimeout(() => {
+      setAscendingWishNickname(null);
       setWishes((prev) => {
         const finalWishes = prev.map((w) =>
           w.id === wishId ? { ...w, status: 'star' as const } : w
         );
         broadcastWishes(
           finalWishes,
-          `⭐ '${target.nickname}'님의 소원이 별이 되었습니다!`,
+          `⭐ '${target.nickname}'님의 기원이 영원한 별이 되었습니다!`,
           true
         );
         return finalWishes;
       });
-      setBannerMessage(`⭐ '${target.nickname}'님의 소원이 밤하늘의 별이 되었습니다!`);
-    }, 3400);
+      setBannerMessage(`⭐ '${target.nickname}'님의 기원이 밤하늘의 별이 되었습니다!`);
+    }, 4200);
   };
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     localStorage.setItem('bokssul_nick', myNickname);
     localStorage.setItem('bokssul_color', myColor);
-    setNickname(myNickname);
-    setBlessingAuthor(myNickname);
+    localStorage.setItem('bokssul_autowatch', String(autoWatchAscension));
     setIsProfileModalOpen(false);
   };
 
@@ -414,7 +460,7 @@ export default function App() {
           if (mode === 'sky') {
             setIsNightMode(true);
             setBannerMessage(
-              '🌌 밤하늘을 드래그해 둘러보고 별을 터치해 소원을 열어보세요!'
+              '🌌 밤하늘을 드래그해 둘러보고 별을 터치해 기원을 확인해보세요!'
             );
           }
         }}
@@ -432,8 +478,10 @@ export default function App() {
         onJoystickDragChange={setIsJoystickDragging}
         onJoystickMove={(vec) => {
           joystickVec.current = vec;
+          // 별 승천 감상 중이라도 조이스틱을 움직이면 즉시 내 시점으로 자유 이탈!
           if (Math.hypot(vec.x, vec.y) > 0.1) {
             if (myAction === 'sit') setMyAction('idle');
+            setAscendingWishNickname(null);
             setFocusedTarget(null);
             setCameraMode('follow');
           }
@@ -447,6 +495,17 @@ export default function App() {
         myKarma={karma}
         myRedBeans={redBeans}
         myFlowerType={flowerType}
+        autoWatchAscension={autoWatchAscension}
+        setAutoWatchAscension={setAutoWatchAscension}
+        ascendingWishNickname={ascendingWishNickname}
+        onCelebrateAscension={() => {
+          handleTriggerAction('jump', '🎉 별 승천 축하하개! (🔮+1)', 1);
+        }}
+        onExitAscensionView={() => {
+          setAscendingWishNickname(null);
+          setFocusedTarget(null);
+          setCameraMode('follow');
+        }}
         onSaveProfile={handleSaveProfile}
       />
 
@@ -476,6 +535,7 @@ export default function App() {
             if (myAction === 'sit') setMyAction('idle');
             setFollowingId(null);
             if (cameraMode === 'sky') {
+              setAscendingWishNickname(null);
               setFocusedTarget(null);
               setCameraMode('follow');
             }
@@ -496,7 +556,6 @@ export default function App() {
           onOrbEvent={handleOrbEvent}
         />
 
-        {/* 액운 먼지령 스폰 & 싸리빗자루 정화 시스템 */}
         <MisfortuneSystem
           spirits={spirits}
           hideLabels={isAnyModalOpen}
@@ -579,25 +638,17 @@ export default function App() {
       <WishWriteModal
         isOpen={isWriteModalOpen}
         onClose={() => setIsWriteModalOpen(false)}
-        onSubmit={handleAddWish}
-        targetBlessings={TARGET_BLESSINGS}
-        pouchColor={pouchColor}
-        setPouchColor={setPouchColor}
-        nickname={nickname}
-        setNickname={setNickname}
-        content={content}
-        setContent={setContent}
+        onCreateSealWish={handleCreateSealWish}
+        myKarma={karma}
+        myRedBeans={redBeans}
       />
 
       <WishDetailModal
         wish={selectedWish}
         onClose={() => setSelectedWishId(null)}
-        onAddBlessing={handleAddBlessing}
+        onSendBlessStamp={handleSendBlessStamp}
         onAscendToStar={handleAscendToStar}
-        blessingAuthor={blessingAuthor}
-        setBlessingAuthor={setBlessingAuthor}
-        blessingComment={blessingComment}
-        setBlessingComment={setBlessingComment}
+        myKarma={karma}
       />
     </div>
   );

@@ -1,33 +1,48 @@
-import React from 'react';
-import { Sparkles as SparkleIcon, MessageCircleHeart, Crown, X } from 'lucide-react';
-import type { Wish } from '../../types/wish';
-
-interface WriteModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  targetBlessings: number;
-  pouchColor: string;
-  setPouchColor: (c: string) => void;
-  nickname: string;
-  setNickname: (n: string) => void;
-  content: string;
-  setContent: (c: string) => void;
-}
+import React, { useState } from 'react';
+import { X, Sparkles as SparkleIcon } from 'lucide-react';
+import type { Wish, WishSealId } from '../../types/wish';
+import {
+  WISH_SEALS,
+  BLESS_STAMPS,
+  WISH_KARMA_COST,
+  WISH_BEAN_KARMA_COST,
+  BLESS_KARMA_COST,
+} from '../../utils/constants';
 
 export const WishWriteModal = ({
   isOpen,
   onClose,
-  onSubmit,
-  targetBlessings,
-  pouchColor,
-  setPouchColor,
-  nickname,
-  setNickname,
-  content,
-  setContent,
-}: WriteModalProps) => {
+  onCreateSealWish,
+  myKarma,
+  myRedBeans,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onCreateSealWish: (
+    sealId: WishSealId,
+    useRedBean: boolean,
+    color: string
+  ) => void;
+  myKarma: number;
+  myRedBeans: number;
+}) => {
+  const [selectedSeal, setSelectedSeal] = useState<WishSealId>('fortune');
+  const [useRedBean, setUseRedBean] = useState(false);
+  const [pouchColor, setPouchColor] = useState('#e53935');
+
   if (!isOpen) return null;
+
+  const currentSeal =
+    WISH_SEALS.find((s) => s.id === selectedSeal) || WISH_SEALS[0];
+  const requiredKarma = useRedBean ? WISH_BEAN_KARMA_COST : WISH_KARMA_COST;
+  const canAfford =
+    myKarma >= requiredKarma && (!useRedBean || myRedBeans >= 1);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canAfford) return;
+    onCreateSealWish(selectedSeal, useRedBean, pouchColor);
+  };
 
   return (
     <div
@@ -36,146 +51,183 @@ export const WishWriteModal = ({
     >
       <form
         onClick={(e) => e.stopPropagation()}
-        onSubmit={onSubmit}
-        className="relative bg-[#fbf6e9] w-full max-w-[390px] max-h-[84dvh] flex flex-col rounded-3xl shadow-2xl border-4 border-double border-amber-900/40 overflow-hidden"
+        onSubmit={handleSubmit}
+        className="bg-[#fbf6e9] w-full max-w-[390px] max-h-[88dvh] overflow-y-auto rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-4"
       >
-        {/* 1. 상단 고정 헤더 */}
-        <div className="px-5 pt-5 pb-3 border-b border-amber-900/15 flex items-center justify-between bg-[#fbf6e9] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded border-2 border-red-700 text-red-700 flex flex-col items-center justify-center text-[9px] font-black leading-none select-none bg-red-50/70 shrink-0">
-              <span>至誠</span>
-              <span>感天</span>
-            </div>
-            <div>
-              <h2 className="text-sm md:text-base font-extrabold text-stone-900 leading-tight">
-                소원지 작성하기 (發願)
-              </h2>
-              <p className="text-[11px] text-stone-500 mt-0.5">
-                이웃의 덕담 {targetBlessings}개가 모이면 밤하늘의 별이 됩니다
-              </p>
-            </div>
+        <div className="flex items-center justify-between border-b border-amber-900/15 pb-3">
+          <div>
+            <span className="text-[10px] font-extrabold text-red-800 bg-red-100 px-2 py-0.5 rounded-full">
+              無言發願 · 마음으로 찍는 기원 인장
+            </span>
+            <h2 className="text-base font-extrabold text-stone-900 mt-0.5">
+              당산나무에 어떤 기원을 올릴까요?
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200/70 hover:bg-stone-300 flex items-center justify-center text-stone-700 transition shrink-0"
+            className="p-1.5 rounded-full bg-stone-200/80 hover:bg-stone-300 text-stone-700"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* 2. 중앙 스크롤 본문 영역 */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          <div>
-            <label className="block text-xs font-extrabold text-stone-700 mb-1.5">
-              복주머니 빛깔 선택
-            </label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                { code: '#e53935', label: '주홍(홍복)' },
-                { code: '#fb8c00', label: '황금(재복)' },
-                { code: '#d81b60', label: '분홍(인연)' },
-                { code: '#43a047', label: '청록(건강)' },
-              ].map((c) => (
+        {/* 내 보유 공덕 & 팥 현황 */}
+        <div className="flex items-center justify-between bg-amber-100/80 px-3.5 py-2 rounded-2xl border border-amber-900/15 text-xs font-extrabold text-amber-950">
+          <span>내 보유 재화</span>
+          <span className="flex items-center gap-2">
+            <span>🔮 공덕 {myKarma}점</span>
+            <span>·</span>
+            <span>🫘 붉은 팥 {myRedBeans}알</span>
+          </span>
+        </div>
+
+        {/* 6대 전통 기원 문양 선택 그리드 */}
+        <div>
+          <label className="block text-xs font-extrabold text-stone-700 mb-2">
+            1. 6대 기원 문양(인장) 선택
+          </label>
+          <div className="grid grid-cols-3 gap-2">
+            {WISH_SEALS.map((seal) => {
+              const isSelected = selectedSeal === seal.id;
+              return (
                 <button
                   type="button"
-                  key={c.code}
-                  onClick={() => setPouchColor(c.code)}
-                  className={`py-2 rounded-xl text-[11px] font-extrabold text-white shadow transition ${
-                    pouchColor === c.code
-                      ? 'ring-2 ring-stone-900 scale-[1.03]'
-                      : 'opacity-65'
+                  key={seal.id}
+                  onClick={() => {
+                    setSelectedSeal(seal.id);
+                    setPouchColor(seal.defaultColor);
+                  }}
+                  className={`p-2.5 rounded-2xl border-2 flex flex-col items-center gap-1 transition transform active:scale-95 ${
+                    isSelected
+                      ? 'bg-red-50 border-red-700 ring-2 ring-red-700/20 shadow-md scale-[1.02]'
+                      : 'bg-white/80 border-stone-200 hover:bg-white text-stone-700'
                   }`}
-                  style={{ backgroundColor: c.code }}
                 >
-                  {c.label}
+                  <span className="text-2xl">{seal.icon}</span>
+                  <span className="text-[11px] font-black text-stone-900 whitespace-nowrap">
+                    {seal.title.split(' · ')[1]}
+                  </span>
+                  <span className="text-[9px] font-serif font-bold text-red-800/80">
+                    {seal.hanja}
+                  </span>
                 </button>
-              ))}
+              );
+            })}
+          </div>
+
+          <div className="mt-2.5 px-3 py-2 bg-white/90 rounded-xl border border-amber-900/15 text-center">
+            <p className="text-xs font-extrabold text-red-900">
+              {currentSeal.icon} {currentSeal.title}
+            </p>
+            <p className="text-[11px] text-stone-600 mt-0.5">
+              "{currentSeal.desc}"
+            </p>
+          </div>
+        </div>
+
+        {/* 붉은 팥(액막이) 추가 옵션 */}
+        <div className="bg-red-950/5 p-3 rounded-2xl border border-red-900/20">
+          <label className="flex items-center justify-between cursor-pointer">
+            <div className="space-y-0.5">
+              <div className="text-xs font-extrabold text-red-950 flex items-center gap-1">
+                <span>🫘 붉은 팥 1알 함께 넣기 (황금 액막이 주머니)</span>
+              </div>
+              <p className="text-[10px] text-stone-600">
+                필요 공덕이 10점으로 줄어들고, 기본 정성 기운 +2개가 바로 채워집니다!
+              </p>
             </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-extrabold text-stone-700 mb-1">
-              발원자 이름 (호/닉네임)
-            </label>
             <input
-              type="text"
-              required
-              maxLength={12}
-              value={nickname}
-              onChange={(e) => setNickname(e.target.value)}
-              placeholder="예: 경주복쓸이"
-              className="w-full min-w-0 box-border px-3.5 py-2.5 rounded-xl bg-[#fffdf7] border border-amber-900/30 text-sm font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-red-800"
+              type="checkbox"
+              checked={useRedBean}
+              disabled={myRedBeans < 1 && !useRedBean}
+              onChange={(e) => setUseRedBean(e.target.checked)}
+              className="w-5 h-5 accent-red-800 rounded cursor-pointer"
             />
-          </div>
+          </label>
+        </div>
 
-          <div>
-            <label className="block text-xs font-extrabold text-stone-700 mb-1">
-              소원 내용 (소원지에 새길 말씀)
-            </label>
-            <textarea
-              required
-              maxLength={120}
-              rows={3}
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="간절히 이루고 싶은 소망을 정성껏 적어주세요..."
-              className="w-full min-w-0 box-border px-3.5 py-2.5 rounded-xl bg-[#fffdf7] border border-amber-900/30 text-sm font-bold text-stone-900 leading-relaxed focus:outline-none focus:ring-2 focus:ring-red-800 resize-none"
-            />
+        {/* 복주머니 빛깔 선택 */}
+        <div>
+          <label className="block text-xs font-extrabold text-stone-700 mb-1.5">
+            2. 복주머니 비단 빛깔
+          </label>
+          <div className="flex gap-2">
+            {[
+              { c: '#e53935', n: '다홍' },
+              { c: '#fb8c00', n: '황금' },
+              { c: '#d81b60', n: '연분홍' },
+              { c: '#43a047', n: '비취' },
+              { c: '#1e88e5', n: '청옥' },
+              { c: '#8e24aa', n: '자수정' },
+            ].map((item) => (
+              <button
+                type="button"
+                key={item.c}
+                onClick={() => setPouchColor(item.c)}
+                className={`flex-1 py-1.5 rounded-xl text-[10px] font-extrabold text-white shadow transition ${
+                  pouchColor === item.c
+                    ? 'ring-2 ring-stone-900 scale-105'
+                    : 'opacity-55'
+                }`}
+                style={{ backgroundColor: item.c }}
+              >
+                {item.n}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* 3. 하단 고정 액션 버튼 */}
-        <div className="px-5 py-3.5 bg-[#f5eedc] border-t border-amber-900/15 flex gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl text-xs font-extrabold text-stone-600 bg-white border border-stone-300 hover:bg-stone-100 transition"
-          >
-            취소
-          </button>
-          <button
-            type="submit"
-            className="flex-1 py-2.5 rounded-xl text-xs font-extrabold bg-red-800 hover:bg-red-700 text-amber-100 shadow-md border border-amber-400/40 transition"
-          >
-            🧧 낙관 찍고 당산나무에 걸기
-          </button>
-        </div>
+        {/* 발원 버튼 (공덕 부족 시 안내 표시) */}
+        <button
+          type="submit"
+          disabled={!canAfford}
+          className={`w-full py-3 rounded-2xl font-extrabold text-xs md:text-sm shadow-lg transition flex items-center justify-center gap-1.5 ${
+            canAfford
+              ? 'bg-red-800 hover:bg-red-700 text-amber-50 cursor-pointer'
+              : 'bg-stone-300 text-stone-500 cursor-not-allowed'
+          }`}
+        >
+          {canAfford ? (
+            <>
+              <SparkleIcon className="w-4 h-4 text-amber-300" />
+              <span>
+                🔮 공덕 {requiredKarma}점
+                {useRedBean ? ' + 🫘 팥 1알' : ''}로 당산나무에 걸기
+              </span>
+            </>
+          ) : (
+            <span>
+              🧹 동산에서 공덕을 더 모아주세요 ({myKarma}/{requiredKarma}점)
+            </span>
+          )}
+        </button>
       </form>
     </div>
   );
 };
 
-interface DetailModalProps {
-  wish: Wish | null;
-  onClose: () => void;
-  onAddBlessing: (e: React.FormEvent) => void;
-  onAscendToStar: (wishId: string) => void;
-  blessingAuthor: string;
-  setBlessingAuthor: (a: string) => void;
-  blessingComment: string;
-  setBlessingComment: (c: string) => void;
-}
-
 export const WishDetailModal = ({
   wish,
   onClose,
-  onAddBlessing,
+  onSendBlessStamp,
   onAscendToStar,
-  blessingAuthor,
-  setBlessingAuthor,
-  blessingComment,
-  setBlessingComment,
-}: DetailModalProps) => {
+  myKarma,
+}: {
+  wish: Wish | null;
+  onClose: () => void;
+  onSendBlessStamp: (stampIcon: string) => void;
+  onAscendToStar: (wishId: string) => void;
+  myKarma: number;
+}) => {
+  const [selectedStamp, setSelectedStamp] = useState('🙏');
+
   if (!wish) return null;
 
-  const isQiFull = wish.blessings.length >= wish.targetBlessings;
-
-  const quickBlessings = [
-    '지극한 정성이 하늘에 닿아 꼭 이루어지길 기원합니다!',
-    '따뜻한 소망에 제 복 기운도 함께 보탭니다 ✨',
-    '복쓸싸리의 가호로 올 한 해 만사형통하시길!',
-  ];
+  const isFull = wish.blessings.length >= wish.targetBlessings;
+  const sealInfo =
+    WISH_SEALS.find((s) => s.id === wish.sealId) || WISH_SEALS[0];
+  const canBless = myKarma >= BLESS_KARMA_COST;
 
   return (
     <div
@@ -184,189 +236,137 @@ export const WishDetailModal = ({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="bg-[#fbf6e9] w-full max-w-[390px] max-h-[84dvh] flex flex-col rounded-3xl shadow-2xl border-4 border-double border-amber-900/40 overflow-hidden"
+        className="bg-[#fbf6e9] w-full max-w-[380px] max-h-[85dvh] overflow-y-auto rounded-3xl p-5 shadow-2xl border-4 border-double border-amber-900/40 space-y-4"
       >
-        {/* 1. 상단 고정 상태 헤더 */}
-        <div className="px-5 pt-4 pb-3 border-b border-amber-900/15 flex items-center justify-between bg-[#fbf6e9] shrink-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span
-              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold ${
-                wish.status === 'star'
-                  ? 'bg-indigo-950 text-amber-300'
-                  : isQiFull
-                  ? 'bg-amber-400 text-stone-950'
-                  : 'bg-amber-200/90 text-amber-950'
-              }`}
-            >
-              {wish.status === 'star'
-                ? '⭐ 밤하늘의 별이 된 소원'
-                : isQiFull
-                ? '✨ 복기운 충만 (승천 준비 완료)'
-                : '📜 당산나무에 걸린 소원지'}
-            </span>
-
-            {wish.isMine && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-900 text-amber-200 text-[10px] font-bold">
-                <Crown className="w-3 h-3 fill-amber-300 text-amber-300" />
-                나의 소원
-              </span>
-            )}
+        <div className="flex items-start justify-between border-b border-amber-900/15 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-2xl">{sealInfo.icon}</span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs font-extrabold text-stone-900">
+                  {wish.nickname}님의 기원
+                </span>
+                {wish.isGoldenBean && (
+                  <span className="px-2 py-0.5 bg-amber-300 text-stone-950 rounded-full text-[9px] font-black">
+                    🫘 황금 액막이
+                  </span>
+                )}
+              </div>
+              <p className="text-sm font-black text-red-900">
+                {sealInfo.title} ({sealInfo.hanja})
+              </p>
+            </div>
           </div>
-
           <button
-            type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-stone-200/70 hover:bg-stone-300 flex items-center justify-center text-stone-700 transition shrink-0"
+            className="p-1.5 rounded-full bg-stone-200/80 hover:bg-stone-300 text-stone-700"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* 2. 중앙 단일 스크롤 영역 (이중 스크롤 제거) */}
-        <div className="p-5 overflow-y-auto space-y-4 flex-1">
-          {/* 소원 본문 카드 */}
-          <div className="bg-[#fffdf7] border-2 border-amber-900/20 rounded-2xl p-4 text-center shadow-sm">
-            <p className="text-stone-900 font-extrabold text-sm md:text-base leading-relaxed break-keep">
-              "{wish.content}"
-            </p>
-            <div className="mt-2.5 flex items-center justify-center gap-2">
-              <span className="text-xs text-stone-600 font-bold">
-                — 발원자: {wish.nickname} —
-              </span>
-              <span className="px-1.5 py-0.5 border border-red-700 text-red-700 text-[9px] font-black rounded">
-                祈願印
-              </span>
-            </div>
+        {/* 전통 인장 카드 */}
+        <div className="bg-white/90 p-4 rounded-2xl border border-amber-900/15 text-center space-y-2 shadow-inner">
+          <div className="w-14 h-14 mx-auto rounded-2xl bg-red-800 text-amber-100 flex flex-col items-center justify-center font-serif font-black text-lg border-2 border-amber-400 shadow">
+            {sealInfo.hanja}
           </div>
-
-          {/* 정성 게이지 및 덕담 목록 */}
-          <div>
-            <div className="flex items-center justify-between text-xs font-extrabold text-stone-700 mb-1.5">
-              <span className="flex items-center gap-1">
-                <MessageCircleHeart className="w-4 h-4 text-rose-600" />이 소원에 모인 정성(덕담)
-              </span>
-              <span className="text-rose-700">
-                {wish.blessings.length} / {wish.targetBlessings} 정성
-              </span>
-            </div>
-
-            <div className="w-full h-2 bg-stone-200 rounded-full overflow-hidden mb-3">
-              <div
-                className="h-full bg-gradient-to-r from-rose-600 via-amber-500 to-yellow-400 transition-all duration-500"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    (wish.blessings.length / wish.targetBlessings) * 100
-                  )}%`,
-                }}
-              />
-            </div>
-
-            <div className="space-y-2">
-              {wish.blessings.length === 0 ? (
-                <p className="text-xs text-stone-500 text-center py-3 bg-stone-100/80 rounded-xl">
-                  아직 남겨진 덕담이 없습니다. 첫 번째 정성을 보태주세요!
-                </p>
-              ) : (
-                wish.blessings.map((b) => (
-                  <div
-                    key={b.id}
-                    className="bg-amber-100/60 border border-amber-300/70 rounded-xl px-3.5 py-2.5 text-left"
-                  >
-                    <div className="flex justify-between text-[11px] font-extrabold text-amber-950 mb-0.5">
-                      <span>🧧 {b.author}님의 덕담</span>
-                      <span className="text-stone-400 font-normal">{b.time}</span>
-                    </div>
-                    <p className="text-xs text-stone-800 font-medium break-keep leading-snug">
-                      {b.comment}
-                    </p>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* [3-A 적용] 기운 충만(3/3) 달성 시: 입력폼 대신 '천기 개방' 박스만 깔끔하게 노출 */}
-          {wish.status === 'hanging' && isQiFull && (
-            <div className="p-4 rounded-2xl bg-gradient-to-r from-indigo-950 via-slate-900 to-indigo-950 text-center border-2 border-amber-400 shadow-lg">
-              <p className="text-xs font-extrabold text-amber-200 mb-2.5 break-keep">
-                ✨ 세 번의 진심 어린 덕담이 모여 복 기운이 충만해졌습니다!
-              </p>
-              <button
-                type="button"
-                onClick={() => onAscendToStar(wish.id)}
-                className="w-full py-3 bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-stone-950 rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-1.5 transition transform active:scale-95"
-              >
-                <SparkleIcon className="w-4 h-4 shrink-0" />
-                <span>천기 개방: 이 소원을 밤하늘의 별로 띄우기!</span>
-              </button>
-            </div>
-          )}
-
-          {/* [3-A & 4-A 적용] 아직 3/3 미만일 때만 덕담 입력 폼 표시 (상하 2줄 배치로 박스 이탈 방지) */}
-          {wish.status === 'hanging' && !isQiFull && (
-            <form
-              onSubmit={onAddBlessing}
-              className="bg-white/95 rounded-2xl p-3.5 border border-amber-900/20 space-y-2.5"
-            >
-              <p className="text-xs font-extrabold text-stone-800">
-                🙏 따뜻한 덕담 한마디로 복 기운 보태기 (積善)
-              </p>
-
-              {/* 빠른 덕담 문구 */}
-              <div className="flex flex-col gap-1">
-                {quickBlessings.map((q, idx) => (
-                  <button
-                    type="button"
-                    key={idx}
-                    onClick={() => setBlessingComment(q)}
-                    className="w-full text-[11px] bg-amber-50 hover:bg-amber-100 border border-amber-200/80 text-amber-950 font-bold px-2.5 py-1.5 rounded-lg transition text-left truncate"
-                  >
-                    + "{q}"
-                  </button>
-                ))}
-              </div>
-
-              {/* 4-A 적용: 윗줄 내 이름, 아랫줄 덕담 내용 상하 2줄 배치 */}
-              <div className="space-y-2 pt-1">
-                <input
-                  type="text"
-                  maxLength={10}
-                  value={blessingAuthor}
-                  onChange={(e) => setBlessingAuthor(e.target.value)}
-                  placeholder="내 이름 (선택 · 미입력 시 익명 복쓸덩이)"
-                  className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-600"
-                />
-                <input
-                  type="text"
-                  required
-                  maxLength={60}
-                  value={blessingComment}
-                  onChange={(e) => setBlessingComment(e.target.value)}
-                  placeholder="소원이 이루어지도록 진심 어린 덕담을 적어주세요"
-                  className="w-full min-w-0 box-border px-3 py-2.5 rounded-xl border border-stone-300 text-xs font-bold text-stone-900 focus:outline-none focus:ring-2 focus:ring-amber-600"
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 bg-red-800 hover:bg-red-700 text-amber-100 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition"
-              >
-                <MessageCircleHeart className="w-4 h-4 shrink-0" />
-                <span>정성 담은 덕담 남기고 복구슬 띄우기 (+1)</span>
-              </button>
-            </form>
-          )}
+          <p className="text-xs font-bold text-stone-700 leading-relaxed">
+            "{sealInfo.desc}"
+          </p>
         </div>
 
-        {/* 3. 하단 고정 닫기 버튼 */}
-        <div className="px-5 py-3 bg-[#f5eedc] border-t border-amber-900/15 shrink-0">
+        {/* 정성(공덕) 게이지 및 보탠 이웃들의 발도장 */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs font-extrabold">
+            <span className="text-stone-700">모인 정성 구슬(氣)</span>
+            <span className="text-amber-800">
+              {wish.blessings.length} / {wish.targetBlessings}개
+            </span>
+          </div>
+          <div className="w-full h-2.5 bg-stone-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-400 to-red-600 transition-all duration-500"
+              style={{
+                width: `${Math.min(
+                  100,
+                  (wish.blessings.length / wish.targetBlessings) * 100
+                )}%`,
+              }}
+            />
+          </div>
+
+          {/* 이웃들이 남긴 무언의 응원 인장 배지 목록 */}
+          <div className="flex flex-wrap gap-1.5 pt-1">
+            {wish.blessings.length === 0 ? (
+              <p className="text-[11px] text-stone-400 py-1">
+                아직 첫 기운이 모이지 않았습니다. 첫 복 기운을 불어넣어 주세요!
+              </p>
+            ) : (
+              wish.blessings.map((b) => (
+                <div
+                  key={b.id}
+                  className="px-2.5 py-1 bg-amber-100/90 border border-amber-400/50 rounded-full text-[11px] font-bold text-stone-800 flex items-center gap-1 shadow-sm"
+                >
+                  <span>{b.stamp || '🙏'}</span>
+                  <span>{b.author}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* 정성이 가득 찼을 때: 밤하늘 별 승천 버튼 */}
+        {isFull && wish.status === 'hanging' && (
+          <button
+            onClick={() => onAscendToStar(wish.id)}
+            className="w-full py-3 bg-gradient-to-r from-indigo-950 via-purple-900 to-indigo-950 hover:opacity-95 text-amber-300 rounded-2xl font-extrabold text-xs md:text-sm shadow-xl border border-amber-300/60 flex items-center justify-center gap-1.5 animate-pulse"
+          >
+            <SparkleIcon className="w-4 h-4 text-amber-300" />
+            <span>🌌 천기 개방: 모두와 함께 밤하늘의 별로 띄우기!</span>
+          </button>
+        )}
+
+        {/* 무언의 공덕 불어넣기 (보시하면 오히려 내 보상화 공덕 +3 보너스) */}
+        <div className="border-t border-amber-900/15 pt-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-extrabold text-stone-800">
+              응원 인장 선택 (내 공덕 🔮{BLESS_KARMA_COST} 소모 ➔ 보시 보너스 🌸+3)
+            </span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            {BLESS_STAMPS.map((st) => (
+              <button
+                type="button"
+                key={st.icon}
+                onClick={() => setSelectedStamp(st.icon)}
+                className={`py-2 rounded-xl border text-center transition ${
+                  selectedStamp === st.icon
+                    ? 'bg-amber-200 border-amber-600 font-extrabold scale-105 shadow'
+                    : 'bg-white border-stone-200 opacity-75'
+                }`}
+              >
+                <div className="text-lg">{st.icon}</div>
+                <div className="text-[9px] text-stone-700 font-bold">
+                  {st.name}
+                </div>
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
-            onClick={onClose}
-            className="w-full py-2.5 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-extrabold transition"
+            disabled={!canBless}
+            onClick={() => onSendBlessStamp(selectedStamp)}
+            className={`w-full py-2.5 rounded-xl text-xs font-extrabold shadow transition ${
+              canBless
+                ? 'bg-lime-800 hover:bg-lime-700 text-white cursor-pointer'
+                : 'bg-stone-300 text-stone-500 cursor-not-allowed'
+            }`}
           >
-            닫기
+            {canBless
+              ? `${selectedStamp} 내 복기운 불어넣어 응원하기 (보유 🔮${myKarma})`
+              : `🧹 공덕이 부족합니다 (필요 🔮${BLESS_KARMA_COST} / 보유 ${myKarma})`}
           </button>
         </div>
       </div>

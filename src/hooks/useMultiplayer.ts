@@ -23,6 +23,7 @@ interface UseMultiplayerProps {
   setSpirits: React.Dispatch<React.SetStateAction<MisfortuneSpirit[]>>;
   setCollectedCount: (count: number) => void;
   onMeteorTriggered: () => void;
+  onRemoteAscension?: (nickname: string) => void;
   setWishes: React.Dispatch<React.SetStateAction<Wish[]>>;
   setBannerMessage: (msg: string | null) => void;
   setIsNightMode: (night: boolean) => void;
@@ -41,6 +42,7 @@ export const useMultiplayer = ({
   setSpirits,
   setCollectedCount,
   onMeteorTriggered,
+  onRemoteAscension,
   setWishes,
   setBannerMessage,
   setIsNightMode,
@@ -97,7 +99,6 @@ export const useMultiplayer = ({
       });
     });
 
-    // 신규 유저가 입장하며 현재 월드 상태를 요청할 때 응답 (State Handshake)
     channel.on('broadcast', { event: 'request-world-sync' }, () => {
       channel.send({
         type: 'broadcast',
@@ -154,7 +155,6 @@ export const useMultiplayer = ({
       }));
     });
 
-    // 구슬별 주도권(ownerId)을 체크하여 내가 치고 있는 공은 덮어쓰지 않음 (떨림 방지)
     channel.on('broadcast', { event: 'orb-sync' }, ({ payload }) => {
       if (!payload || !payload.orbs) return;
       const incoming = payload.orbs as RollingOrb[];
@@ -192,6 +192,9 @@ export const useMultiplayer = ({
       setWishes(incoming);
       if (payload.banner) setBannerMessage(payload.banner);
       if (payload.nightMode !== undefined) setIsNightMode(payload.nightMode);
+      if (payload.ascendingNickname && onRemoteAscension) {
+        onRemoteAscension(payload.ascendingNickname);
+      }
     });
 
     channel.subscribe(async (status) => {
@@ -206,7 +209,6 @@ export const useMultiplayer = ({
           z: myLatestCoordsRef.current.z,
           rot: myLatestCoordsRef.current.rot,
         });
-        // 입장 직후 기존 접속자에게 현재 구슬/액운 위치 요청
         channel.send({
           type: 'broadcast',
           event: 'request-world-sync',
@@ -229,6 +231,7 @@ export const useMultiplayer = ({
     setSpirits,
     setCollectedCount,
     onMeteorTriggered,
+    onRemoteAscension,
     setWishes,
     setBannerMessage,
     setIsNightMode,
@@ -308,7 +311,12 @@ export const useMultiplayer = ({
   }, []);
 
   const broadcastWishes = useCallback(
-    (nextWishes: Wish[], banner?: string, nightMode?: boolean) => {
+    (
+      nextWishes: Wish[],
+      banner?: string,
+      nightMode?: boolean,
+      ascendingNickname?: string
+    ) => {
       if (!channelRef.current) return;
       channelRef.current.send({
         type: 'broadcast',
@@ -317,6 +325,7 @@ export const useMultiplayer = ({
           wishes: nextWishes,
           banner,
           nightMode,
+          ascendingNickname,
         },
       });
     },
