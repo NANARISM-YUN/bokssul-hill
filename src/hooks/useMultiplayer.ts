@@ -6,6 +6,8 @@ import type {
   RollingOrb,
   Wish,
   PlayerAction,
+  FlowerType,
+  MisfortuneSpirit,
 } from '../types/wish';
 
 interface UseMultiplayerProps {
@@ -13,7 +15,12 @@ interface UseMultiplayerProps {
   myColor: string;
   myAction: PlayerAction;
   myEmote: string | null;
+  myKarma: number;
+  myFlowerType: FlowerType;
   orbsRef: React.MutableRefObject<RollingOrb[]>;
+  spiritsRef: React.MutableRefObject<MisfortuneSpirit[]>;
+  wishesRef: React.MutableRefObject<Wish[]>;
+  setSpirits: React.Dispatch<React.SetStateAction<MisfortuneSpirit[]>>;
   setCollectedCount: (count: number) => void;
   onMeteorTriggered: () => void;
   setWishes: React.Dispatch<React.SetStateAction<Wish[]>>;
@@ -26,7 +33,12 @@ export const useMultiplayer = ({
   myColor,
   myAction,
   myEmote,
+  myKarma,
+  myFlowerType,
   orbsRef,
+  spiritsRef,
+  wishesRef,
+  setSpirits,
   setCollectedCount,
   onMeteorTriggered,
   setWishes,
@@ -76,11 +88,47 @@ export const useMultiplayer = ({
             isMoving: existing?.isMoving ?? false,
             action: existing?.action ?? 'idle',
             emote: existing?.emote ?? null,
+            karma: info.karma ?? existing?.karma ?? 0,
+            flowerType: info.flowerType ?? existing?.flowerType ?? 'pink_lotus',
             lastSeen: Date.now(),
           };
         });
         return next;
       });
+    });
+
+    // 신규 유저가 입장하며 현재 월드 상태를 요청할 때 응답 (State Handshake)
+    channel.on('broadcast', { event: 'request-world-sync' }, () => {
+      channel.send({
+        type: 'broadcast',
+        event: 'world-sync-response',
+        payload: {
+          orbs: orbsRef.current,
+          spirits: spiritsRef.current,
+          wishes: wishesRef.current,
+        },
+      });
+    });
+
+    channel.on('broadcast', { event: 'world-sync-response' }, ({ payload }) => {
+      if (!payload) return;
+      if (payload.orbs) {
+        orbsRef.current = payload.orbs;
+        setCollectedCount(
+          (payload.orbs as RollingOrb[]).filter((o) => o.collected).length
+        );
+      }
+      if (payload.spirits) {
+        spiritsRef.current = payload.spirits;
+        setSpirits(payload.spirits);
+      }
+      if (payload.wishes) {
+        const synced = (payload.wishes as Wish[]).map((w) => ({
+          ...w,
+          isMine: false,
+        }));
+        setWishes(synced);
+      }
     });
 
     channel.on('broadcast', { event: 'player-move' }, ({ payload }) => {
@@ -98,20 +146,41 @@ export const useMultiplayer = ({
           isMoving: payload.isMoving,
           action: payload.action ?? prev[payload.id]?.action ?? 'idle',
           emote: payload.emote ?? prev[payload.id]?.emote ?? null,
+          karma: payload.karma ?? prev[payload.id]?.karma ?? 0,
+          flowerType:
+            payload.flowerType ?? prev[payload.id]?.flowerType ?? 'pink_lotus',
           lastSeen: Date.now(),
         },
       }));
     });
 
-    // 다른 유저가 굴린 구슬 좌표를 React 리렌더링 없이 orbsRef에 직접 반영
+    // 구슬별 주도권(ownerId)을 체크하여 내가 치고 있는 공은 덮어쓰지 않음 (떨림 방지)
     channel.on('broadcast', { event: 'orb-sync' }, ({ payload }) => {
       if (!payload || !payload.orbs) return;
       const incoming = payload.orbs as RollingOrb[];
-      orbsRef.current = incoming;
-      setCollectedCount(incoming.filter((o) => o.collected).length);
+      const merged = orbsRef.current.map((localOrb, idx) => {
+        const remoteOrb = incoming[idx];
+        if (!remoteOrb) return localOrb;
+        if (
+          localOrb.ownerId === myId &&
+          Date.now() - (localOrb.updatedAt || 0) < 1200 &&
+          !remoteOrb.collected
+        ) {
+          return localOrb;
+        }
+        return remoteOrb;
+      });
+      orbsRef.current = merged;
+      setCollectedCount(merged.filter((o) => o.collected).length);
       if (payload.meteorTriggered) {
         onMeteorTriggered();
       }
+    });
+
+    channel.on('broadcast', { event: 'spirit-sync' }, ({ payload }) => {
+      if (!payload || !payload.spirits) return;
+      spiritsRef.current = payload.spirits;
+      setSpirits(payload.spirits);
     });
 
     channel.on('broadcast', { event: 'wish-sync' }, ({ payload }) => {
@@ -131,9 +200,17 @@ export const useMultiplayer = ({
           id: myId,
           nickname: myNickname,
           color: myColor,
+          karma: myKarma,
+          flowerType: myFlowerType,
           x: myLatestCoordsRef.current.x,
           z: myLatestCoordsRef.current.z,
           rot: myLatestCoordsRef.current.rot,
+        });
+        // 입장 직후 기존 접속자에게 현재 구슬/액운 위치 요청
+        channel.send({
+          type: 'broadcast',
+          event: 'request-world-sync',
+          payload: {},
         });
       }
     });
@@ -144,7 +221,12 @@ export const useMultiplayer = ({
   }, [
     myNickname,
     myColor,
+    myKarma,
+    myFlowerType,
     orbsRef,
+    spiritsRef,
+    wishesRef,
+    setSpirits,
     setCollectedCount,
     onMeteorTriggered,
     setWishes,
@@ -166,14 +248,16 @@ export const useMultiplayer = ({
           ...coords,
           action: myAction,
           emote: myEmote,
+          karma: myKarma,
+          flowerType: myFlowerType,
         },
       });
     },
-    [myNickname, myColor, myAction, myEmote]
+    [myNickname, myColor, myAction, myEmote, myKarma, myFlowerType]
   );
 
   const broadcastAction = useCallback(
-    (action: PlayerAction, emote: string | null) => {
+    (action: PlayerAction, emote: string | null, nextKarma?: number) => {
       if (!channelRef.current) return;
       channelRef.current.send({
         type: 'broadcast',
@@ -185,10 +269,12 @@ export const useMultiplayer = ({
           ...myLatestCoordsRef.current,
           action,
           emote,
+          karma: nextKarma ?? myKarma,
+          flowerType: myFlowerType,
         },
       });
     },
-    [myNickname, myColor]
+    [myNickname, myColor, myKarma, myFlowerType]
   );
 
   const broadcastOrbs = useCallback(
@@ -212,6 +298,15 @@ export const useMultiplayer = ({
     []
   );
 
+  const broadcastSpirits = useCallback((spirits: MisfortuneSpirit[]) => {
+    if (!channelRef.current) return;
+    channelRef.current.send({
+      type: 'broadcast',
+      event: 'spirit-sync',
+      payload: { spirits },
+    });
+  }, []);
+
   const broadcastWishes = useCallback(
     (nextWishes: Wish[], banner?: string, nightMode?: boolean) => {
       if (!channelRef.current) return;
@@ -229,10 +324,12 @@ export const useMultiplayer = ({
   );
 
   return {
+    myId: myIdRef.current,
     remotePlayers,
     broadcastPosition,
     broadcastAction,
     broadcastOrbs,
+    broadcastSpirits,
     broadcastWishes,
   };
 };

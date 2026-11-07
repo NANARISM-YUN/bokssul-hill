@@ -9,6 +9,7 @@ import type {
   CameraMode,
   PlayerAction,
   RollingOrb,
+  MisfortuneSpirit,
 } from './types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './utils/terrain';
 import {
@@ -16,7 +17,9 @@ import {
   RANDOM_COLORS,
   INITIAL_WISHES,
   generateScatteredOrbs,
+  generateInitialSpirits,
 } from './utils/constants';
+import { useGameProgress } from './hooks/useGameProgress';
 import { useMultiplayer } from './hooks/useMultiplayer';
 import {
   TraditionalClouds,
@@ -31,10 +34,13 @@ import {
   MeteorShowerEffect,
   WishAltarAndOrbs,
 } from './components/three/InteractiveEvents';
+import { MisfortuneSystem } from './components/three/MisfortuneSystem';
 import { HudOverlay } from './components/ui/HudOverlay';
 import { WishWriteModal, WishDetailModal } from './components/ui/WishModals';
 
 export default function App() {
+  const { karma, addKarma, redBeans, flowerType } = useGameProgress();
+
   const [myNickname, setMyNickname] = useState<string>(
     () =>
       localStorage.getItem('bokssul_nick') ||
@@ -55,12 +61,16 @@ export default function App() {
   );
   const [followingId, setFollowingId] = useState<string | null>(null);
 
-  // 60fps 구슬 물리용 Ref (리렌더링 방지) 및 골인 개수 표시용 State
   const orbsRef = useRef<RollingOrb[]>(generateScatteredOrbs());
   const [collectedCount, setCollectedCount] = useState(0);
   const [meteorActive, setMeteorActive] = useState(false);
 
-  // 내 캐릭터 실시간 위치/속도 공유 Ref
+  const initialSpirits = useRef<MisfortuneSpirit[]>(generateInitialSpirits());
+  const spiritsRef = useRef<MisfortuneSpirit[]>(initialSpirits.current);
+  const [spirits, setSpirits] = useState<MisfortuneSpirit[]>(
+    initialSpirits.current
+  );
+
   const playerPosRef = useRef({
     x: (Math.random() - 0.5) * 4,
     z: 8.2 + Math.random() * 2,
@@ -68,6 +78,11 @@ export default function App() {
   const playerMoveVecRef = useRef({ x: 0, z: 0, isMoving: false });
 
   const [wishes, setWishes] = useState<Wish[]>(INITIAL_WISHES);
+  const wishesRef = useRef<Wish[]>(wishes);
+  useEffect(() => {
+    wishesRef.current = wishes;
+  }, [wishes]);
+
   const [isNearTree, setIsNearTree] = useState(false);
   const [isWriteModalOpen, setIsWriteModalOpen] = useState(false);
   const [selectedWishId, setSelectedWishId] = useState<string | null>(null);
@@ -84,7 +99,7 @@ export default function App() {
   >(null);
   const [isNightMode, setIsNightMode] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(
-    '오색 복구슬 3개를 바구니에 골인시켜 별똥별을 불러보세요!'
+    '🧹 싸리빗자루로 액운을 쓸거나 복구슬을 바구니에 모아 공덕(🔮)을 쌓아보세요!'
   );
 
   const keys = useRef<{ [key: string]: boolean }>({});
@@ -102,7 +117,8 @@ export default function App() {
     setIsNightMode(true);
     setCameraMode('sky');
     setFocusedTarget(null);
-    setBannerMessage('🌠 복바구니에 구슬이 가득 차 밤하늘에 별똥별이 쏟아집니다!');
+    addKarma(5);
+    setBannerMessage('🌠 별똥별 축제 발동! 동산의 모든 복쓸덩이가 공덕 +5점을 받았습니다!');
 
     setTimeout(() => {
       setMeteorActive(false);
@@ -111,20 +127,27 @@ export default function App() {
       setCollectedCount(0);
       setBannerMessage('🔮 동산 곳곳에 새로운 오색 복구슬들이 나타났습니다!');
     }, 10000);
-  }, []);
+  }, [addKarma]);
 
   const {
+    myId,
     remotePlayers,
     broadcastPosition,
     broadcastAction,
     broadcastOrbs,
+    broadcastSpirits,
     broadcastWishes,
   } = useMultiplayer({
     myNickname,
     myColor,
     myAction,
     myEmote,
+    myKarma: karma,
+    myFlowerType: flowerType,
     orbsRef,
+    spiritsRef,
+    wishesRef,
+    setSpirits,
     setCollectedCount,
     onMeteorTriggered: triggerMeteorFestival,
     setWishes,
@@ -139,21 +162,72 @@ export default function App() {
   const remoteList = Object.values(remotePlayers);
 
   const handleTriggerAction = useCallback(
-    (action: PlayerAction, label: string) => {
+    (action: PlayerAction, label: string, bonusKarma = 0) => {
+      const nextKarma = karma + bonusKarma;
+      if (bonusKarma > 0) addKarma(bonusKarma);
       setMyAction(action);
       setMyEmote(label);
-      broadcastAction(action, label);
+      broadcastAction(action, label, nextKarma);
 
       if (action !== 'sit') {
         setTimeout(() => {
           setMyAction('idle');
           setMyEmote(null);
-        }, 2800);
+        }, 2400);
       } else {
-        setTimeout(() => setMyEmote(null), 2500);
+        setTimeout(() => setMyEmote(null), 2400);
       }
     },
-    [broadcastAction]
+    [karma, addKarma, broadcastAction]
+  );
+
+  // 싸리빗자루로 액운 쓸어내기 처리
+  const handleSweepSpirits = useCallback(
+    (targetSpiritId?: string) => {
+      const pPos = playerPosRef.current;
+      let hitAny = false;
+      let purifiedAny = false;
+
+      const updated = spiritsRef.current
+        .map((sp) => {
+          const dist = Math.hypot(sp.x - pPos.x, sp.z - pPos.z);
+          if (sp.id === targetSpiritId && dist > 3.2) {
+            // 멀리 있는 액운을 터치했으면 그 액운 앞으로 먼저 걸어가게 유도
+            setClickTarget({ x: sp.x, z: sp.z });
+            return sp;
+          }
+          if (dist <= 3.2 || sp.id === targetSpiritId) {
+            hitAny = true;
+            const nextHp = sp.hp - 1;
+            if (nextHp <= 0) {
+              purifiedAny = true;
+              return null;
+            }
+            return { ...sp, hp: nextHp };
+          }
+          return sp;
+        })
+        .filter(Boolean) as MisfortuneSpirit[];
+
+      // 액운이 모두 정화되면 새 액운 리스폰 예약
+      if (updated.length < 2) {
+        const extra = generateInitialSpirits()[0];
+        updated.push(extra);
+      }
+
+      spiritsRef.current = updated;
+      setSpirits(updated);
+      broadcastSpirits(updated);
+
+      if (purifiedAny) {
+        handleTriggerAction('sweep', '🧹 액운 정화 완료! (🔮공덕 +3)', 3);
+      } else if (hitAny) {
+        handleTriggerAction('sweep', '🧹 쓱싹쓱싹! 액운 쓸어내기!', 1);
+      } else {
+        handleTriggerAction('sweep', '🧹 싸리빗자루 손질 중!');
+      }
+    },
+    [broadcastSpirits, handleTriggerAction]
   );
 
   const handleOrbEvent = useCallback(
@@ -162,9 +236,12 @@ export default function App() {
       setCollectedCount(count);
       const allCollected = count === currentOrbs.length;
 
-      if (justCollected && !allCollected) {
-        setMyEmote(`🧺 골인! (${count}/3)`);
-        setTimeout(() => setMyEmote(null), 2000);
+      if (justCollected) {
+        addKarma(3);
+        if (!allCollected) {
+          setMyEmote(`🧺 골인! 🔮공덕 +3 (${count}/3)`);
+          setTimeout(() => setMyEmote(null), 2200);
+        }
       }
 
       broadcastOrbs(currentOrbs, allCollected && !meteorActive);
@@ -173,13 +250,17 @@ export default function App() {
         triggerMeteorFestival();
       }
     },
-    [meteorActive, broadcastOrbs, triggerMeteorFestival]
+    [meteorActive, addKarma, broadcastOrbs, triggerMeteorFestival]
   );
 
-  const handleHighFive = useCallback((friendName: string) => {
-    setMyEmote(`⚡ ${friendName}님과 복 박치기!`);
-    setTimeout(() => setMyEmote(null), 2200);
-  }, []);
+  const handleHighFive = useCallback(
+    (friendName: string) => {
+      addKarma(2);
+      setMyEmote(`⚡ ${friendName}님과 복 박치기! (🔮+2)`);
+      setTimeout(() => setMyEmote(null), 2200);
+    },
+    [addKarma]
+  );
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -250,6 +331,7 @@ export default function App() {
 
     setWishes(nextWishes);
     setBlessingComment('');
+    addKarma(2);
 
     let msg: string | undefined;
     if (nextBlessings.length >= selectedWish.targetBlessings) {
@@ -344,7 +426,8 @@ export default function App() {
         isAnyModalOpen={isAnyModalOpen}
         isNearTree={isNearTree}
         myAction={myAction}
-        onTriggerAction={handleTriggerAction}
+        onTriggerAction={(action, label) => handleTriggerAction(action, label)}
+        onSweepAction={() => handleSweepSpirits()}
         onOpenWriteModal={() => setIsWriteModalOpen(true)}
         onJoystickDragChange={setIsJoystickDragging}
         onJoystickMove={(vec) => {
@@ -361,6 +444,9 @@ export default function App() {
         setMyNickname={setMyNickname}
         myColor={myColor}
         setMyColor={setMyColor}
+        myKarma={karma}
+        myRedBeans={redBeans}
+        myFlowerType={flowerType}
         onSaveProfile={handleSaveProfile}
       />
 
@@ -400,6 +486,7 @@ export default function App() {
         <ClickTargetMarker target={clickTarget} />
 
         <WishAltarAndOrbs
+          myId={myId}
           orbsRef={orbsRef}
           playerPosRef={playerPosRef}
           playerMoveVecRef={playerMoveVecRef}
@@ -409,9 +496,20 @@ export default function App() {
           onOrbEvent={handleOrbEvent}
         />
 
+        {/* 액운 먼지령 스폰 & 싸리빗자루 정화 시스템 */}
+        <MisfortuneSystem
+          spirits={spirits}
+          hideLabels={isAnyModalOpen}
+          onSweepSpirit={(id) => handleSweepSpirits(id)}
+        />
+
         <WishTreeAndGuardian
           onPetGuardian={() =>
-            handleTriggerAction('jump', '🐾 복쓸싸리님 쓰담쓰담!')
+            handleTriggerAction(
+              'jump',
+              '🐾 복쓸싸리님 참배 완료! (🔮공덕 +2)',
+              2
+            )
           }
           hideLabels={isAnyModalOpen}
           showGreeting={isNearTree}
@@ -437,6 +535,8 @@ export default function App() {
           myColor={myColor}
           myAction={myAction}
           myEmote={myEmote}
+          myKarma={karma}
+          myFlowerType={flowerType}
           onPositionBroadcast={broadcastPosition}
         />
 

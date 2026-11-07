@@ -1,10 +1,17 @@
 import React, { forwardRef } from 'react';
 import * as THREE from 'three';
+import type { FlowerType } from '../../types/wish';
+import { BosanghwaHeadpiece, SsariBroomMesh } from './BosanghwaFlower';
 
 export const BokssulAvatarMesh = forwardRef<
   THREE.Group,
-  { color: string }
->(({ color }, ref) => {
+  {
+    color: string;
+    karma?: number;
+    flowerType?: FlowerType;
+    isSweeping?: boolean;
+  }
+>(({ color, karma = 0, flowerType = 'pink_lotus', isSweeping = false }, ref) => {
   return (
     <group ref={ref}>
       {/* 복쓸덩이 구름 몸통 */}
@@ -44,6 +51,12 @@ export const BokssulAvatarMesh = forwardRef<
         <sphereGeometry args={[0.048, 12, 12]} />
         <meshBasicMaterial color="#1c1917" />
       </mesh>
+
+      {/* 플러그인 1: 머리 위 보상화 개화 */}
+      <BosanghwaHeadpiece karma={karma} flowerType={flowerType} />
+
+      {/* 플러그인 2: 액운 정화용 싸리빗자루 */}
+      <SsariBroomMesh isSweeping={isSweeping} />
     </group>
   );
 });

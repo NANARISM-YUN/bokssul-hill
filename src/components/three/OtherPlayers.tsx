@@ -77,6 +77,8 @@ const SingleRemoteBokssul = ({
     } else if (player.action === 'sit') {
       bodyRef.current.scale.set(1.25, 0.68, 1.25);
       actionY = -0.14;
+    } else if (player.action === 'sweep') {
+      bodyRef.current.rotation.y = Math.sin(state.clock.elapsedTime * 20) * 0.28;
     } else if (isActuallyMoving) {
       const squash = Math.sin(hopTimer.current * 2) * 0.12;
       bodyRef.current.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
@@ -105,7 +107,7 @@ const SingleRemoteBokssul = ({
     >
       {!hideLabels && (
         <Html
-          position={[0, 1.3, 0]}
+          position={[0, 1.48, 0]}
           center
           distanceFactor={14}
           zIndexRange={[10, 0]}
@@ -139,11 +141,17 @@ const SingleRemoteBokssul = ({
         </Html>
       )}
 
-      {player.action === 'jump' && (
+      {(player.action === 'jump' || player.action === 'sweep') && (
         <Sparkles count={15} scale={1.8} size={4} color="#fde047" />
       )}
 
-      <BokssulAvatarMesh ref={bodyRef} color={player.color} />
+      <BokssulAvatarMesh
+        ref={bodyRef}
+        color={player.color}
+        karma={player.karma}
+        flowerType={player.flowerType}
+        isSweeping={player.action === 'sweep'}
+      />
     </group>
   );
 };

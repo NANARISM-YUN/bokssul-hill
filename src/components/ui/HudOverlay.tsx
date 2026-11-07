@@ -7,8 +7,13 @@ import {
   Smile,
   Footprints,
 } from 'lucide-react';
-import type { CameraMode, PlayerAction } from '../../types/wish';
-import { RANDOM_COLORS } from '../../utils/constants';
+import type { CameraMode, PlayerAction, FlowerType } from '../../types/wish';
+import {
+  RANDOM_COLORS,
+  FLOWER_NAMES,
+  KARMA_THRESHOLDS,
+} from '../../utils/constants';
+import { getGrowthStage } from '../../hooks/useGameProgress';
 import { VirtualJoystick } from './VirtualJoystick';
 
 interface HudOverlayProps {
@@ -28,6 +33,7 @@ interface HudOverlayProps {
   isNearTree: boolean;
   myAction: PlayerAction;
   onTriggerAction: (action: PlayerAction, label: string) => void;
+  onSweepAction: () => void;
   onOpenWriteModal: () => void;
   onJoystickMove: (vec: { x: number; y: number }) => void;
   onJoystickDragChange: (dragging: boolean) => void;
@@ -37,6 +43,9 @@ interface HudOverlayProps {
   setMyNickname: (name: string) => void;
   myColor: string;
   setMyColor: (color: string) => void;
+  myKarma: number;
+  myRedBeans: number;
+  myFlowerType: FlowerType;
   onSaveProfile: (e: React.FormEvent) => void;
 }
 
@@ -57,6 +66,7 @@ export const HudOverlay = ({
   isNearTree,
   myAction,
   onTriggerAction,
+  onSweepAction,
   onOpenWriteModal,
   onJoystickMove,
   onJoystickDragChange,
@@ -66,9 +76,14 @@ export const HudOverlay = ({
   setMyNickname,
   myColor,
   setMyColor,
+  myKarma,
+  myRedBeans,
+  myFlowerType,
   onSaveProfile,
 }: HudOverlayProps) => {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
+  const stage = getGrowthStage(myKarma);
+  const stageLabels = ['🌰 씨앗', '🌱 새싹', '🌷 봉오리', '🪷 만개'];
 
   const handleActionClick = (action: PlayerAction, label: string) => {
     setIsActionMenuOpen(false);
@@ -83,18 +98,21 @@ export const HudOverlay = ({
           <button
             onClick={() => setIsProfileModalOpen(true)}
             className="h-10 bg-[#fcf9f2]/95 hover:bg-white backdrop-blur-md pl-2 pr-3 rounded-full shadow-lg border border-amber-900/15 flex items-center gap-2 transition active:scale-95"
-            title="내 복쓸덩이 꾸미기"
+            title="내 복쓸덩이 & 보상화 정보"
           >
             <div className="w-6 h-6 rounded-full bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-[11px] shadow-inner">
               福
             </div>
-            <span className="font-extrabold text-stone-900 text-xs whitespace-nowrap">
-              복쓸싸리
-            </span>
-            <span className="w-px h-3 bg-stone-300" />
             <span className="flex items-center gap-1 text-[11px] font-extrabold text-emerald-800">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               {totalOnlineCount}
+            </span>
+            <span className="w-px h-3 bg-stone-300" />
+            {/* 내 공덕(🔮) & 팥(🫘) 표시 */}
+            <span className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1">
+              <span>🔮 {myKarma}</span>
+              <span className="text-stone-300">·</span>
+              <span>🫘 {myRedBeans}</span>
             </span>
           </button>
 
@@ -174,7 +192,7 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 하단 조이스틱 & 몸짓 & 소원지 버튼 --- */}
+      {/* --- 하단 조이스틱 & 싸리빗자루 쓸기 & 몸짓 & 소원지 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
@@ -222,10 +240,20 @@ export const HudOverlay = ({
             </div>
           )}
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            {/* 싸리빗자루 액운 쓸기 버튼 */}
+            <button
+              onClick={onSweepAction}
+              className="h-11 px-3.5 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs shadow-xl border-2 border-white flex items-center gap-1 transition transform active:scale-95"
+              title="싸리빗자루로 주변 액운 쓸어내기"
+            >
+              <span>🧹</span>
+              <span>쓸기</span>
+            </button>
+
             <button
               onClick={() => setIsActionMenuOpen(!isActionMenuOpen)}
-              className="h-11 px-3.5 rounded-full bg-[#fcf9f2]/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1.5 transition transform active:scale-95"
+              className="h-11 px-3 rounded-full bg-[#fcf9f2]/95 hover:bg-white text-stone-800 font-extrabold text-xs shadow-xl border border-stone-300 flex items-center gap-1 transition transform active:scale-95"
             >
               <Smile className="w-4 h-4 text-amber-500 shrink-0" />
               <span>몸짓</span>
@@ -233,20 +261,20 @@ export const HudOverlay = ({
 
             <button
               onClick={onOpenWriteModal}
-              className={`h-11 px-4 md:px-5 rounded-full font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border ${
+              className={`h-11 px-3.5 md:px-5 rounded-full font-extrabold text-xs md:text-sm shadow-2xl flex items-center gap-1.5 transition transform active:scale-95 border ${
                 isNearTree
-                  ? 'bg-amber-400 hover:bg-amber-300 text-stone-950 border-white ring-4 ring-amber-300/60 animate-pulse'
+                  ? 'bg-red-700 hover:bg-red-600 text-amber-100 border-amber-300 ring-4 ring-amber-300/50 animate-pulse'
                   : 'bg-red-800 hover:bg-red-700 text-amber-50 border-amber-400/50'
               }`}
             >
               <ScrollText className="w-4 h-4 shrink-0" />
-              <span>{isNearTree ? '소원지 올리기 ✨' : '소원지 작성'}</span>
+              <span>소원</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* --- 내 복쓸덩이 프로필 모달 --- */}
+      {/* --- 내 복쓸덩이 프로필 & 보상화 성장 모달 --- */}
       {isProfileModalOpen && (
         <div
           onClick={() => setIsProfileModalOpen(false)}
@@ -259,8 +287,31 @@ export const HudOverlay = ({
           >
             <div className="flex items-center justify-between border-b border-amber-900/15 pb-2.5">
               <h3 className="text-sm font-extrabold text-stone-900">
-                🐾 내 복쓸덩이 꾸미기 ({totalOnlineCount}명 접속 중)
+                🐾 내 복쓸덩이 & 보상화 ({totalOnlineCount}명 산책 중)
               </h3>
+            </div>
+
+            {/* 내 보상화 개화 현황 카드 */}
+            <div className="bg-amber-100/80 border border-amber-900/15 rounded-2xl p-3 space-y-1.5">
+              <div className="flex items-center justify-between text-xs font-extrabold text-amber-950">
+                <span>내 운명의 꽃: {FLOWER_NAMES[myFlowerType]}</span>
+                <span className="px-2 py-0.5 bg-amber-300 rounded-full text-[10px]">
+                  {stageLabels[stage]}
+                </span>
+              </div>
+              <p className="text-[11px] text-stone-700 font-bold">
+                현재 공덕: 🔮 {myKarma}점 · 보유 팥: 🫘 {myRedBeans}알
+              </p>
+              <p className="text-[10px] text-stone-600">
+                {stage === 0 &&
+                  `🌱 새싹 개화까지 공덕 ${KARMA_THRESHOLDS.SPROUT - myKarma}점 남음`}
+                {stage === 1 &&
+                  `🌷 꽃봉오리까지 공덕 ${KARMA_THRESHOLDS.BUD - myKarma}점 남음`}
+                {stage === 2 &&
+                  `🪷 보상화 만개 & 황금 후광까지 공덕 ${KARMA_THRESHOLDS.BLOOM - myKarma}점 남음`}
+                {stage === 3 &&
+                  `✨ 최고 경지 달성! 머리 위에 보상화와 황금 후광이 빛납니다!`}
+              </p>
             </div>
 
             <div>
@@ -302,7 +353,7 @@ export const HudOverlay = ({
               type="submit"
               className="w-full py-2.5 bg-lime-800 hover:bg-lime-700 text-white rounded-xl text-xs font-extrabold shadow"
             >
-              적용하기
+              저장하기
             </button>
           </form>
         </div>

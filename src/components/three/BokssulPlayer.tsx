@@ -7,6 +7,7 @@ import type {
   CameraMode,
   PlayerAction,
   RemotePlayer,
+  FlowerType,
 } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 import { BokssulAvatarMesh } from './BokssulAvatar';
@@ -31,6 +32,8 @@ export const BokssulPlayerAndCamera = ({
   myColor = '#d84315',
   myAction = 'idle',
   myEmote = null,
+  myKarma = 0,
+  myFlowerType = 'pink_lotus',
   onPositionBroadcast,
 }: {
   keys: React.MutableRefObject<{ [key: string]: boolean }>;
@@ -56,6 +59,8 @@ export const BokssulPlayerAndCamera = ({
   myColor?: string;
   myAction?: PlayerAction;
   myEmote?: string | null;
+  myKarma?: number;
+  myFlowerType?: FlowerType;
   onPositionBroadcast?: (state: {
     x: number;
     z: number;
@@ -166,7 +171,6 @@ export const BokssulPlayerAndCamera = ({
       hopTimer.current = 0;
     }
 
-    // 구슬 물리 엔진이 참조할 내 현재 이동 벡터 업데이트
     playerMoveVecRef.current = {
       x: moveVec.x * speed * moveLen,
       z: moveVec.z * speed * moveLen,
@@ -210,6 +214,8 @@ export const BokssulPlayerAndCamera = ({
     } else if (myAction === 'sit') {
       bodyRef.current.scale.set(1.26, 0.66, 1.26);
       actionY = -0.14;
+    } else if (myAction === 'sweep') {
+      bodyRef.current.rotation.y = Math.sin(now * 20) * 0.28;
     } else if (isMoving) {
       const squash = Math.sin(hopTimer.current * 2) * 0.13;
       bodyRef.current.scale.set(1 - squash * 0.5, 1 + squash, 1 - squash * 0.5);
@@ -287,7 +293,7 @@ export const BokssulPlayerAndCamera = ({
     >
       {!hideLabels && (
         <Html
-          position={[0, 1.3, 0]}
+          position={[0, 1.48, 0]}
           center
           distanceFactor={14}
           zIndexRange={[10, 0]}
@@ -309,11 +315,17 @@ export const BokssulPlayerAndCamera = ({
         </Html>
       )}
 
-      {(myAction === 'jump' || highFiveSpark) && (
-        <Sparkles count={28} scale={2.2} size={5} speed={2} color="#fde047" />
+      {(myAction === 'jump' || myAction === 'sweep' || highFiveSpark) && (
+        <Sparkles count={25} scale={2.2} size={5} speed={2} color="#fde047" />
       )}
 
-      <BokssulAvatarMesh ref={bodyRef} color={myColor} />
+      <BokssulAvatarMesh
+        ref={bodyRef}
+        color={myColor}
+        karma={myKarma}
+        flowerType={myFlowerType}
+        isSweeping={myAction === 'sweep'}
+      />
     </group>
   );
 };

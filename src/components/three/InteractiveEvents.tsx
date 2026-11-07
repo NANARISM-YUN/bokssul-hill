@@ -5,7 +5,6 @@ import * as THREE from 'three';
 import type { RollingOrb } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 
-// 1. 바닥 터치 이동 물결 마커
 export const ClickTargetMarker = ({
   target,
 }: {
@@ -37,7 +36,6 @@ export const ClickTargetMarker = ({
   );
 };
 
-// 2. 밤하늘 황금 유성우 (별똥별) 연출
 const SingleMeteor = ({ seed }: { seed: number }) => {
   const ref = useRef<THREE.Group>(null);
   const speed = 16 + (seed % 7) * 2;
@@ -93,7 +91,6 @@ export const MeteorShowerEffect = ({ active }: { active: boolean }) => {
   );
 };
 
-// 3. 60fps 직접 제어 방식의 개별 구슬 메쉬 (React 리렌더링 없이 부드럽게 이동)
 const SmoothRollingOrbMesh = ({
   orbIndex,
   orbsRef,
@@ -117,7 +114,6 @@ const SmoothRollingOrbMesh = ({
 
     const dt = Math.min(delta, 0.05);
 
-    // 색상 동기화
     if (materialRef.current) {
       materialRef.current.color.set(orb.color);
       materialRef.current.emissive.set(orb.color);
@@ -130,7 +126,6 @@ const SmoothRollingOrbMesh = ({
     }
 
     if (orb.collected) {
-      // 바구니 홀 안으로 빨려 들어가며 작아지는 연출
       sinkProgress.current = Math.min(1, sinkProgress.current + dt * 3.0);
       const p = sinkProgress.current;
       const altarY = getTerrainHeight(altarX, altarZ);
@@ -148,21 +143,28 @@ const SmoothRollingOrbMesh = ({
       groupRef.current.visible = true;
       groupRef.current.scale.set(1, 1, 1);
 
-      // 리스폰 등 큰 위치 변화 시 즉시 이동, 평소에는 60fps 고주파 보간으로 스무스하게 추적
       const jumpDist = Math.hypot(
         orb.x - renderPos.current.x,
         orb.z - renderPos.current.z
       );
-      if (jumpDist > 4.0) {
+      if (jumpDist > 5.0) {
         renderPos.current.x = orb.x;
         renderPos.current.z = orb.z;
       } else {
         const prevX = renderPos.current.x;
         const prevZ = renderPos.current.z;
-        renderPos.current.x = THREE.MathUtils.lerp(prevX, orb.x, Math.min(1, 22 * dt));
-        renderPos.current.z = THREE.MathUtils.lerp(prevZ, orb.z, Math.min(1, 22 * dt));
+        // 부드러운 추적으로 멀티플레이 네트워크 지연 흡수
+        renderPos.current.x = THREE.MathUtils.lerp(
+          prevX,
+          orb.x,
+          Math.min(1, 18 * dt)
+        );
+        renderPos.current.z = THREE.MathUtils.lerp(
+          prevZ,
+          orb.z,
+          Math.min(1, 18 * dt)
+        );
 
-        // 실제 이동량(dx, dz)에 비례해 공이 땅을 구르듯 자연스럽게 회전
         const moveDx = renderPos.current.x - prevX;
         const moveDz = renderPos.current.z - prevZ;
         meshRef.current.rotation.x += moveDz * 2.1;
@@ -195,8 +197,8 @@ const SmoothRollingOrbMesh = ({
   );
 };
 
-// 4. 입체 복바구니 & 60fps 구슬 물리 루프 통합 컴포넌트
 export const WishAltarAndOrbs = ({
+  myId,
   orbsRef,
   playerPosRef,
   playerMoveVecRef,
@@ -205,9 +207,14 @@ export const WishAltarAndOrbs = ({
   meteorActive,
   onOrbEvent,
 }: {
+  myId: string;
   orbsRef: React.MutableRefObject<RollingOrb[]>;
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
-  playerMoveVecRef: React.MutableRefObject<{ x: number; z: number; isMoving: boolean }>;
+  playerMoveVecRef: React.MutableRefObject<{
+    x: number;
+    z: number;
+    isMoving: boolean;
+  }>;
   collectedCount: number;
   hideLabels: boolean;
   meteorActive: boolean;
@@ -218,21 +225,20 @@ export const WishAltarAndOrbs = ({
   const altarY = getTerrainHeight(altarX, altarZ);
   const lastNetworkSync = useRef(0);
 
-  // 매 프레임(60fps)마다 끊김 없이 돌아가는 구슬 전용 물리 엔진
   useFrame((state, delta) => {
     const dt = Math.min(delta, 0.04);
     const orbs = orbsRef.current;
     const pPos = playerPosRef.current;
     const pMove = playerMoveVecRef.current;
 
-    let anyOrbMoving = false;
+    let myOrbsMoved = false;
     let newlyCollected = false;
 
     for (let i = 0; i < orbs.length; i++) {
       const orb = orbs[i];
       if (orb.collected) continue;
 
-      // ① 내 복쓸덩이와 충돌 시 탄성 킥 부여
+      // ① 내 복쓸덩이가 공을 치면 즉시 이 공의 주도권(ownerId = myId)을 획득!
       const dx = orb.x - pPos.x;
       const dz = orb.z - pPos.z;
       const dist = Math.hypot(dx, dz);
@@ -240,18 +246,32 @@ export const WishAltarAndOrbs = ({
       if (dist < 1.08 && dist > 0.0001) {
         const nx = dx / dist;
         const nz = dz / dist;
-        // 겹침 해소
         orb.x += nx * (1.08 - dist);
         orb.z += nz * (1.08 - dist);
 
-        // 캐릭터의 이동 방향과 부딪힌 각도를 합산해 부드럽고 묵직한 속도 전달
         const kickPower = pMove.isMoving ? 9.5 : 4.8;
         orb.vx = nx * kickPower + pMove.x * 3.2;
         orb.vz = nz * kickPower + pMove.z * 3.2;
-        anyOrbMoving = true;
+        orb.ownerId = myId;
+        orb.updatedAt = Date.now();
+        myOrbsMoved = true;
       }
 
-      // ② 구슬끼리 부딪혔을 때 당구공 탄성 충돌
+      // ⭐ 핵심: 다른 유저가 최근 2초 내에 친 공은 그 유저가 물리 연산을 전담하므로 내 폰에서는 관성 추측(Dead Reckoning)만 가볍게 수행
+      const isOwnedByOther =
+        orb.ownerId &&
+        orb.ownerId !== myId &&
+        Date.now() - (orb.updatedAt || 0) < 2000;
+
+      if (isOwnedByOther) {
+        orb.x += orb.vx * dt;
+        orb.z += orb.vz * dt;
+        orb.vx *= Math.exp(-1.55 * dt);
+        orb.vz *= Math.exp(-1.55 * dt);
+        continue;
+      }
+
+      // ② 내가 주도권을 가진 공끼리의 충돌 및 물리 연산
       for (let j = i + 1; j < orbs.length; j++) {
         const other = orbs[j];
         if (other.collected) continue;
@@ -274,16 +294,16 @@ export const WishAltarAndOrbs = ({
           orb.vz = -onz * impact;
           other.vx = onx * impact;
           other.vz = onz * impact;
-          anyOrbMoving = true;
+          other.ownerId = myId;
+          other.updatedAt = Date.now();
+          myOrbsMoved = true;
         }
       }
 
-      // ③ 매 프레임 연속 이동 + 언덕 경사면 자연 굴러내림 + 잔디 마찰 감속
       const speed = Math.hypot(orb.vx, orb.vz);
       if (speed > 0.04) {
-        anyOrbMoving = true;
+        if (orb.ownerId === myId) myOrbsMoved = true;
 
-        // 언덕 경사도 계산 (오르막이면 살짝 느려지고 내리막이면 자연스럽게 굴러감)
         const hCenter = getTerrainHeight(orb.x, orb.z);
         const hX = getTerrainHeight(orb.x + 0.2, orb.z);
         const hZ = getTerrainHeight(orb.x, orb.z + 0.2);
@@ -296,12 +316,10 @@ export const WishAltarAndOrbs = ({
         orb.x += orb.vx * dt;
         orb.z += orb.vz * dt;
 
-        // 부드러운 감속 마찰계수 (끊기지 않고 길게 데구르르 굴러감)
         const damping = Math.exp(-1.55 * dt);
         orb.vx *= damping;
         orb.vz *= damping;
 
-        // 맵 경계선 및 당산나무 기둥 바운스
         const distOrigin = Math.hypot(orb.x, orb.z);
         if (distOrigin > 23.0) {
           const bx = orb.x / distOrigin;
@@ -323,24 +341,25 @@ export const WishAltarAndOrbs = ({
         orb.vz = 0;
       }
 
-      // ④ 입체 복바구니(0, 6.0) 골인 판정 및 홀 흡입 효과
-      const distToBasket = Math.hypot(orb.x - altarX, orb.z - altarZ);
-      if (distToBasket < 2.35 && distToBasket > 1.32) {
-        orb.vx += ((altarX - orb.x) / distToBasket) * 14 * dt;
-        orb.vz += ((altarZ - orb.z) / distToBasket) * 14 * dt;
-        anyOrbMoving = true;
-      } else if (distToBasket <= 1.32) {
-        orb.collected = true;
-        orb.vx = 0;
-        orb.vz = 0;
-        newlyCollected = true;
-        anyOrbMoving = true;
+      // 내가 친 공이 바구니에 골인했을 때
+      if (orb.ownerId === myId) {
+        const distToBasket = Math.hypot(orb.x - altarX, orb.z - altarZ);
+        if (distToBasket < 2.35 && distToBasket > 1.32) {
+          orb.vx += ((altarX - orb.x) / distToBasket) * 14 * dt;
+          orb.vz += ((altarZ - orb.z) / distToBasket) * 14 * dt;
+          myOrbsMoved = true;
+        } else if (distToBasket <= 1.32) {
+          orb.collected = true;
+          orb.vx = 0;
+          orb.vz = 0;
+          newlyCollected = true;
+          myOrbsMoved = true;
+        }
       }
     }
 
-    // 네트워크 브로드캐스트는 0.12초 간격으로만 가볍게 전송 (내 화면은 60fps 유지)
     const now = state.clock.elapsedTime;
-    if (newlyCollected || (anyOrbMoving && now - lastNetworkSync.current > 0.12)) {
+    if (newlyCollected || (myOrbsMoved && now - lastNetworkSync.current > 0.1)) {
       lastNetworkSync.current = now;
       onOrbEvent(orbs, newlyCollected);
     }
@@ -348,7 +367,6 @@ export const WishAltarAndOrbs = ({
 
   return (
     <group>
-      {/* 언덕 경사에 파묻히지 않는 입체 복바구니 (포켓 홀) */}
       <group position={[altarX, altarY, altarZ]}>
         <mesh position={[0, -0.1, 0]} receiveShadow>
           <cylinderGeometry args={[1.65, 1.85, 0.55, 28]} />
@@ -414,7 +432,6 @@ export const WishAltarAndOrbs = ({
         )}
       </group>
 
-      {/* 3개의 오색 구슬 (60fps 직접 제어) */}
       {[0, 1, 2].map((idx) => (
         <SmoothRollingOrbMesh
           key={idx}

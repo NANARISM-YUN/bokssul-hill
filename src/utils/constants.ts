@@ -1,7 +1,30 @@
-import type { Wish, RollingOrb } from '../types/wish';
+import type { Wish, RollingOrb, MisfortuneSpirit, FlowerType } from '../types/wish';
 import { BRANCH_POSITIONS, STAR_POSITIONS } from './terrain';
 
 export const TARGET_BLESSINGS = 3;
+
+// 보상화 개화 단계별 필요 공덕(🔮) 기준
+export const KARMA_THRESHOLDS = {
+  SPROUT: 10, // 2단계: 영험한 새싹
+  BUD: 30,    // 3단계: 빛나는 꽃봉오리
+  BLOOM: 60,  // 4단계: 보상화 만개 + 황금 두광(후광)
+};
+
+export const FLOWER_TYPES: FlowerType[] = [
+  'white_lotus', // 백련화
+  'pink_lotus',  // 홍련화
+  'peony',       // 모란화
+  'gold_plum',   // 황매화
+  'blue_bosang', // 청보상화
+];
+
+export const FLOWER_NAMES: Record<FlowerType, string> = {
+  white_lotus: '🪷 백련화',
+  pink_lotus: '🌸 홍련화',
+  peony: '🌺 모란화',
+  gold_plum: '🌼 황매화',
+  blue_bosang: '💠 청보상화',
+};
 
 export const RANDOM_COLORS = [
   '#e53935',
@@ -13,11 +36,11 @@ export const RANDOM_COLORS = [
 ];
 
 export const ORB_PALETTE = [
-  '#ff5252', // 홍옥 (다홍)
-  '#ffd740', // 호박 (황금)
-  '#69f0ae', // 비취 (에메랄드)
-  '#40c4ff', // 청옥 (사파이어)
-  '#e040fb', // 자수정 (보라)
+  '#ff5252',
+  '#ffd740',
+  '#69f0ae',
+  '#40c4ff',
+  '#e040fb',
 ];
 
 export const generateScatteredOrbs = (): RollingOrb[] => {
@@ -45,6 +68,24 @@ export const generateScatteredOrbs = (): RollingOrb[] => {
       vz: 0,
       color: palette[idx],
       collected: false,
+      ownerId: null,
+      updatedAt: Date.now(),
+    };
+  });
+};
+
+// 동산 곳곳에 출몰하는 액운(厄運) 먼지령 4마리 생성
+export const generateInitialSpirits = (): MisfortuneSpirit[] => {
+  return [0, 1, 2, 3].map((idx) => {
+    const angle = (idx * Math.PI) / 2 + (Math.random() - 0.5) * 0.6;
+    const radius = 7.5 + Math.random() * 8.5;
+    return {
+      id: `spirit_${idx}_${Date.now()}`,
+      x: Number((Math.cos(angle) * radius).toFixed(2)),
+      z: Number((Math.sin(angle) * radius).toFixed(2)),
+      hp: 3,
+      maxHp: 3,
+      scale: 0.9 + Math.random() * 0.35,
     };
   });
 };
