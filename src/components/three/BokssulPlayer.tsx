@@ -8,6 +8,7 @@ import type {
   PlayerAction,
   RemotePlayer,
   FlowerType,
+  Wish,
 } from '../../types/wish';
 import { getTerrainHeight } from '../../utils/terrain';
 import { BokssulAvatarMesh } from './BokssulAvatar';
@@ -26,6 +27,7 @@ export const BokssulPlayerAndCamera = ({
   controlsRef,
   cameraMode,
   focusedTarget,
+  ascendingWish,
   onNearTreeChange,
   hideLabels = false,
   myNickname = '복쓸덩이',
@@ -53,6 +55,7 @@ export const BokssulPlayerAndCamera = ({
   controlsRef: React.RefObject<OrbitControlsImpl | null>;
   cameraMode: CameraMode;
   focusedTarget: [number, number, number] | null;
+  ascendingWish?: Wish | null;
   onNearTreeChange: (isNear: boolean) => void;
   hideLabels?: boolean;
   myNickname?: string;
@@ -79,9 +82,17 @@ export const BokssulPlayerAndCamera = ({
   const [highFiveSpark, setHighFiveSpark] = useState(false);
 
   const cameraTransitionTimer = useRef(0);
+  const ascensionProgressRef = useRef(0);
+
   useEffect(() => {
-    cameraTransitionTimer.current = 1.25;
+    cameraTransitionTimer.current = 1.5;
   }, [cameraMode, focusedTarget]);
+
+  useEffect(() => {
+    if (ascendingWish) {
+      ascensionProgressRef.current = 0;
+    }
+  }, [ascendingWish?.id]);
 
   useFrame((state, delta) => {
     if (!groupRef.current || !bodyRef.current) return;
@@ -243,8 +254,25 @@ export const BokssulPlayerAndCamera = ({
     }
     wasMovingRef.current = isMoving;
 
+    // --- 카메라 제어 (⭐ 별 승천 실시간 궤적 추적 추가) ---
     if (controlsRef.current) {
-      if (focusedTarget && cameraTransitionTimer.current > 0) {
+      if (ascendingWish && cameraMode === 'sky') {
+        // 별이 나뭇가지에서 하늘로 솟구치는 실시간 위치를 계산해 시선이 끝까지 따라감
+        ascensionProgressRef.current = Math.min(
+          1,
+          ascensionProgressRef.current + dt * 0.35
+        );
+        const t = ascensionProgressRef.current;
+        const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+        const start = new THREE.Vector3(...ascendingWish.branchPos);
+        const end = new THREE.Vector3(...ascendingWish.starPos);
+        const liveStarPos = new THREE.Vector3().lerpVectors(start, end, ease);
+
+        controlsRef.current.target.lerp(liveStarPos, 6 * dt);
+        const idealCamPos = new THREE.Vector3(0, 5.5, 18.5);
+        state.camera.position.lerp(idealCamPos, 2.5 * dt);
+      } else if (focusedTarget && cameraTransitionTimer.current > 0) {
         cameraTransitionTimer.current -= dt;
         const focusVec = new THREE.Vector3(...focusedTarget);
         controlsRef.current.target.lerp(focusVec, 6 * dt);
@@ -265,7 +293,7 @@ export const BokssulPlayerAndCamera = ({
       } else if (cameraMode === 'sky' && cameraTransitionTimer.current > 0) {
         cameraTransitionTimer.current -= dt;
         const skyTarget = new THREE.Vector3(0, 17.5, 0);
-        const skyCamPos = new THREE.Vector3(0, 4.5, 14);
+        const skyCamPos = new THREE.Vector3(0, 4.5, 15);
         controlsRef.current.target.lerp(skyTarget, 4 * dt);
         state.camera.position.lerp(skyCamPos, 3.5 * dt);
       }

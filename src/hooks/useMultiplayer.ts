@@ -11,6 +11,7 @@ import type {
 } from '../types/wish';
 
 interface UseMultiplayerProps {
+  roomName: string;
   myNickname: string;
   myColor: string;
   myAction: PlayerAction;
@@ -30,6 +31,7 @@ interface UseMultiplayerProps {
 }
 
 export const useMultiplayer = ({
+  roomName,
   myNickname,
   myColor,
   myAction,
@@ -61,9 +63,32 @@ export const useMultiplayer = ({
     isMoving: false,
   });
 
+  // 최신 상태를 Ref로 유지하여 공덕/액션 변경 시 채널이 재연결(끊김)되는 현상 방지!
+  const latestProfileRef = useRef({
+    nickname: myNickname,
+    color: myColor,
+    action: myAction,
+    emote: myEmote,
+    karma: myKarma,
+    flowerType: myFlowerType,
+  });
+
+  useEffect(() => {
+    latestProfileRef.current = {
+      nickname: myNickname,
+      color: myColor,
+      action: myAction,
+      emote: myEmote,
+      karma: myKarma,
+      flowerType: myFlowerType,
+    };
+  }, [myNickname, myColor, myAction, myEmote, myKarma, myFlowerType]);
+
   useEffect(() => {
     const myId = myIdRef.current;
-    const channel = supabase.channel('bokssul-hill-room', {
+    setRemotePlayers({});
+
+    const channel = supabase.channel(roomName, {
       config: {
         presence: { key: myId },
         broadcast: { self: false },
@@ -146,7 +171,10 @@ export const useMultiplayer = ({
           rot: payload.rot,
           isMoving: payload.isMoving,
           action: payload.action ?? prev[payload.id]?.action ?? 'idle',
-          emote: payload.emote ?? prev[payload.id]?.emote ?? null,
+          emote:
+            payload.emote !== undefined
+              ? payload.emote
+              : prev[payload.id]?.emote ?? null,
           karma: payload.karma ?? prev[payload.id]?.karma ?? 0,
           flowerType:
             payload.flowerType ?? prev[payload.id]?.flowerType ?? 'pink_lotus',
@@ -199,12 +227,13 @@ export const useMultiplayer = ({
 
     channel.subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        const prof = latestProfileRef.current;
         await channel.track({
           id: myId,
-          nickname: myNickname,
-          color: myColor,
-          karma: myKarma,
-          flowerType: myFlowerType,
+          nickname: prof.nickname,
+          color: prof.color,
+          karma: prof.karma,
+          flowerType: prof.flowerType,
           x: myLatestCoordsRef.current.x,
           z: myLatestCoordsRef.current.z,
           rot: myLatestCoordsRef.current.rot,
@@ -221,10 +250,9 @@ export const useMultiplayer = ({
       supabase.removeChannel(channel);
     };
   }, [
+    roomName,
     myNickname,
     myColor,
-    myKarma,
-    myFlowerType,
     orbsRef,
     spiritsRef,
     wishesRef,
@@ -241,43 +269,45 @@ export const useMultiplayer = ({
     (coords: { x: number; z: number; rot: number; isMoving: boolean }) => {
       myLatestCoordsRef.current = coords;
       if (!channelRef.current) return;
+      const prof = latestProfileRef.current;
       channelRef.current.send({
         type: 'broadcast',
         event: 'player-move',
         payload: {
           id: myIdRef.current,
-          nickname: myNickname,
-          color: myColor,
+          nickname: prof.nickname,
+          color: prof.color,
           ...coords,
-          action: myAction,
-          emote: myEmote,
-          karma: myKarma,
-          flowerType: myFlowerType,
+          action: prof.action,
+          emote: prof.emote,
+          karma: prof.karma,
+          flowerType: prof.flowerType,
         },
       });
     },
-    [myNickname, myColor, myAction, myEmote, myKarma, myFlowerType]
+    []
   );
 
   const broadcastAction = useCallback(
     (action: PlayerAction, emote: string | null, nextKarma?: number) => {
       if (!channelRef.current) return;
+      const prof = latestProfileRef.current;
       channelRef.current.send({
         type: 'broadcast',
         event: 'player-move',
         payload: {
           id: myIdRef.current,
-          nickname: myNickname,
-          color: myColor,
+          nickname: prof.nickname,
+          color: prof.color,
           ...myLatestCoordsRef.current,
           action,
           emote,
-          karma: nextKarma ?? myKarma,
-          flowerType: myFlowerType,
+          karma: nextKarma ?? prof.karma,
+          flowerType: prof.flowerType,
         },
       });
     },
-    [myNickname, myColor, myKarma, myFlowerType]
+    []
   );
 
   const broadcastOrbs = useCallback(

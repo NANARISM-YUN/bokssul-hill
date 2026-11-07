@@ -7,8 +7,16 @@ import {
   Smile,
   Footprints,
   PartyPopper,
+  Share2,
+  Home,
+  Globe,
 } from 'lucide-react';
-import type { CameraMode, PlayerAction, FlowerType } from '../../types/wish';
+import type {
+  CameraMode,
+  PlayerAction,
+  FlowerType,
+  ZoneMode,
+} from '../../types/wish';
 import {
   RANDOM_COLORS,
   FLOWER_NAMES,
@@ -19,6 +27,9 @@ import { getGrowthStage } from '../../hooks/useGameProgress';
 import { VirtualJoystick } from './VirtualJoystick';
 
 interface HudOverlayProps {
+  zoneMode: ZoneMode;
+  onSwitchZone: (zone: ZoneMode) => void;
+  onCopyInviteLink: () => void;
   totalOnlineCount: number;
   hasRemotePlayers: boolean;
   followingId: string | null;
@@ -36,6 +47,7 @@ interface HudOverlayProps {
   myAction: PlayerAction;
   onTriggerAction: (action: PlayerAction, label: string) => void;
   onSweepAction: () => void;
+  onThrowRedBean: () => void;
   onOpenWriteModal: () => void;
   onJoystickMove: (vec: { x: number; y: number }) => void;
   onJoystickDragChange: (dragging: boolean) => void;
@@ -57,6 +69,9 @@ interface HudOverlayProps {
 }
 
 export const HudOverlay = ({
+  zoneMode,
+  onSwitchZone,
+  onCopyInviteLink,
   totalOnlineCount,
   hasRemotePlayers,
   followingId,
@@ -74,6 +89,7 @@ export const HudOverlay = ({
   myAction,
   onTriggerAction,
   onSweepAction,
+  onThrowRedBean,
   onOpenWriteModal,
   onJoystickMove,
   onJoystickDragChange,
@@ -104,12 +120,13 @@ export const HudOverlay = ({
 
   return (
     <>
-      {/* --- 상단 2-캡슐 통합 헤더 --- */}
-      <header className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between gap-2 pointer-events-none">
+      {/* --- 상단 바 --- */}
+      <header className="absolute top-3 left-3 right-3 z-20 flex flex-wrap items-center justify-between gap-1.5 pointer-events-none">
+        {/* 좌측 캡슐: 프로필 & 광장/내동산 전환 */}
         <div className="flex items-center gap-1.5 pointer-events-auto">
           <button
             onClick={() => setIsProfileModalOpen(true)}
-            className="h-10 bg-[#fcf9f2]/95 hover:bg-white backdrop-blur-md pl-2 pr-3 rounded-full shadow-lg border border-amber-900/15 flex items-center gap-2 transition active:scale-95"
+            className="h-10 bg-[#fcf9f2]/95 hover:bg-white backdrop-blur-md pl-2 pr-3 rounded-full shadow-lg border border-amber-900/15 flex items-center gap-1.5 transition active:scale-95"
             title="내 복쓸덩이 & 설정"
           >
             <div className="w-6 h-6 rounded-full bg-red-800 flex items-center justify-center text-amber-100 font-serif font-black text-[11px] shadow-inner">
@@ -121,33 +138,68 @@ export const HudOverlay = ({
             </span>
             <span className="w-px h-3 bg-stone-300" />
             <span className="text-[11px] font-extrabold text-amber-900 flex items-center gap-1">
-              <span>🔮 {myKarma}</span>
+              <span>🔮{myKarma}</span>
               <span className="text-stone-300">·</span>
-              <span>🫘 {myRedBeans}</span>
+              <span>🫘{myRedBeans}</span>
             </span>
           </button>
+
+          {/* [Phase 3 핵심] 광장 ↔ 내 동산 전환 캡슐 */}
+          <div className="h-10 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5">
+            <button
+              onClick={() => onSwitchZone('public')}
+              className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 ${
+                zoneMode === 'public'
+                  ? 'bg-red-800 text-amber-50 shadow'
+                  : 'text-stone-700 hover:bg-stone-200/70'
+              }`}
+            >
+              <Globe className="w-3 h-3 shrink-0" />
+              <span>광장</span>
+            </button>
+            <button
+              onClick={() => onSwitchZone('my_garden')}
+              className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 ${
+                zoneMode === 'my_garden'
+                  ? 'bg-lime-800 text-white shadow'
+                  : 'text-stone-700 hover:bg-stone-200/70'
+              }`}
+            >
+              <Home className="w-3 h-3 shrink-0" />
+              <span>내동산</span>
+            </button>
+          </div>
+
+          {zoneMode === 'my_garden' && (
+            <button
+              onClick={onCopyInviteLink}
+              className="h-10 px-3 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition active:scale-95"
+              title="내 동산 친구 초대 링크 복사"
+            >
+              <Share2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden sm:inline">초대</span>
+            </button>
+          )}
 
           {hasRemotePlayers && (
             <button
               onClick={onToggleFollow}
-              className={`h-10 px-3 rounded-full shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition ${
+              className={`h-10 px-2.5 rounded-full shadow-lg text-[11px] font-extrabold flex items-center gap-1 transition ${
                 followingId
                   ? 'bg-amber-400 text-stone-950 ring-2 ring-white animate-pulse'
                   : 'bg-[#fcf9f2]/95 text-stone-800 border border-stone-300'
               }`}
             >
               <Footprints className="w-3.5 h-3.5 shrink-0" />
-              <span className="hidden sm:inline">
-                {followingId ? '기차놀이 중' : '따라가기'}
-              </span>
             </button>
           )}
         </div>
 
+        {/* 우측 시점 캡슐 */}
         <div className="h-10 bg-[#fcf9f2]/95 backdrop-blur-md p-1 rounded-full shadow-lg border border-stone-300/80 flex items-center gap-0.5 pointer-events-auto">
           <button
             onClick={() => onSelectCameraMode('follow')}
-            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
+            className={`h-8 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-1 whitespace-nowrap ${
               cameraMode === 'follow' && !hasFocusedTarget
                 ? 'bg-lime-800 text-white shadow'
                 : 'text-stone-700 hover:bg-stone-200/70'
@@ -159,7 +211,7 @@ export const HudOverlay = ({
 
           <button
             onClick={() => onSelectCameraMode('tree')}
-            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
+            className={`h-8 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
               cameraMode === 'tree' && !hasFocusedTarget
                 ? 'bg-lime-800 text-white shadow'
                 : 'text-stone-700 hover:bg-stone-200/70'
@@ -171,7 +223,7 @@ export const HudOverlay = ({
 
           <button
             onClick={() => onSelectCameraMode('sky')}
-            className={`h-8 px-2.5 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
+            className={`h-8 px-2 rounded-full text-[11px] font-extrabold transition flex items-center gap-0.5 whitespace-nowrap ${
               cameraMode === 'sky'
                 ? 'bg-indigo-950 text-amber-300 shadow'
                 : 'text-stone-700 hover:bg-stone-200/70'
@@ -203,7 +255,7 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- ⭐ 누군가의 소원이 별로 승천할 때 뜨는 합동 축하 & 자유 이탈 바 --- */}
+      {/* --- 별 승천 합동 축하 & 자유 이탈 바 --- */}
       {ascendingWishNickname && !isAnyModalOpen && (
         <div className="absolute bottom-20 left-4 right-4 z-30 flex justify-center pointer-events-none">
           <div className="bg-indigo-950/90 backdrop-blur-md border-2 border-amber-300/80 rounded-2xl p-2.5 shadow-2xl flex items-center gap-2 pointer-events-auto">
@@ -224,7 +276,7 @@ export const HudOverlay = ({
         </div>
       )}
 
-      {/* --- 하단 조이스틱 & 싸리빗자루 쓸기 & 무언 감정/몸짓 팔레트 & 소원 버튼 --- */}
+      {/* --- 하단 조이스틱 & 액션 버튼 --- */}
       <div className="absolute bottom-4 left-4 right-4 z-20 flex items-end justify-between pointer-events-none">
         <div className="pointer-events-auto">
           <VirtualJoystick
@@ -234,7 +286,6 @@ export const HudOverlay = ({
         </div>
 
         <div className="pointer-events-auto flex flex-col items-end gap-2">
-          {/* 4대 몸짓 + 8종 이모티콘 통합 무언(Zero-Text) 팔레트 */}
           {isActionMenuOpen && (
             <div className="bg-[#fcf9f2]/95 backdrop-blur-md p-2.5 rounded-3xl shadow-2xl border-2 border-amber-900/20 w-[250px] space-y-2">
               <div className="text-[10px] font-extrabold text-stone-500 px-1">
@@ -295,10 +346,22 @@ export const HudOverlay = ({
           )}
 
           <div className="flex items-center gap-1.5">
+            {/* 광장에서 수확한 붉은 팥으로 액운 일격 정화 버튼 */}
+            {zoneMode === 'public' && myRedBeans > 0 && (
+              <button
+                onClick={onThrowRedBean}
+                className="h-11 px-3 rounded-full bg-red-900 hover:bg-red-800 text-amber-100 font-extrabold text-xs shadow-xl border border-amber-400/60 flex items-center gap-1 transition transform active:scale-95"
+                title="붉은 팥 1알을 뿌려 액운을 단번에 정화합니다"
+              >
+                <span>🫘</span>
+                <span className="hidden sm:inline">팥 뿌리기</span>
+              </button>
+            )}
+
             <button
               onClick={onSweepAction}
               className="h-11 px-3.5 rounded-full bg-amber-400 hover:bg-amber-300 text-stone-950 font-extrabold text-xs shadow-xl border-2 border-white flex items-center gap-1 transition transform active:scale-95"
-              title="싸리빗자루로 액운 쓸어내기"
+              title="싸리빗자루로 액운 쓸기 / 팥밭 돌보기"
             >
               <span>🧹</span>
               <span>쓸기</span>
@@ -327,7 +390,7 @@ export const HudOverlay = ({
         </div>
       </div>
 
-      {/* --- 내 복쓸덩이 프로필 & 보상화 & 별 승천 연출 ON/OFF 설정 모달 --- */}
+      {/* --- 프로필 & 환경 설정 모달 --- */}
       {isProfileModalOpen && (
         <div
           onClick={() => setIsProfileModalOpen(false)}
@@ -401,7 +464,6 @@ export const HudOverlay = ({
               </div>
             </div>
 
-            {/* 타인의 별 승천 연출 자동 보기 ON/OFF 스위치 */}
             <div className="bg-white/80 p-3 rounded-2xl border border-stone-200">
               <label className="flex items-center justify-between cursor-pointer">
                 <div>
@@ -409,7 +471,7 @@ export const HudOverlay = ({
                     🌟 별 승천 연출 함께 보기
                   </div>
                   <div className="text-[10px] text-stone-500">
-                    이웃의 소원이 별이 될 때 시점을 자동으로 비춥니다
+                    소원이 하늘로 떠오를 때 시선이 자동으로 따라갑니다
                   </div>
                 </div>
                 <input
