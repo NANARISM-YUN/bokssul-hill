@@ -196,41 +196,51 @@ export const HudOverlay = ({
 
         {/* 우측: 잘리지 않는 시점 캡슐 */}
         <div className="h-9 bg-[#fcf9f2]/95 backdrop-blur-md p-0.5 rounded-full shadow-md border border-stone-300/80 flex items-center pointer-events-auto shrink-0">
-          <button
-            onClick={() => onSelectCameraMode('follow')}
-            className={`h-7 w-7 rounded-full flex items-center justify-center transition ${
-              cameraMode === 'follow' && !hasFocusedTarget
-                ? 'bg-lime-800 text-white shadow'
-                : 'text-stone-700'
-            }`}
-          >
-            <Compass className="w-3.5 h-3.5" />
-          </button>
-
-          {zoneMode === 'public' && (
-            <button
-              onClick={() => onSelectCameraMode('tree')}
-              className={`h-7 px-1.5 rounded-full text-[10px] font-extrabold transition flex items-center gap-0.5 ${
-                cameraMode === 'tree' && !hasFocusedTarget
-                  ? 'bg-lime-800 text-white shadow'
-                  : 'text-stone-700'
-              }`}
-            >
-              <span>🌳{hangingCount}</span>
-            </button>
+          {/* 우측: 터치할 때마다 [🧭산책 ➔ 🌳나무 ➔ ⭐별]로 순환하는 단일 버튼 */}
+        <button
+          onClick={() => {
+            if (zoneMode === 'public') {
+              const nextMode: CameraMode =
+                cameraMode === 'follow'
+                  ? 'tree'
+                  : cameraMode === 'tree'
+                  ? 'sky'
+                  : 'follow';
+              onSelectCameraMode(nextMode);
+            } else {
+              const nextMode: CameraMode =
+                cameraMode === 'follow' ? 'sky' : 'follow';
+              onSelectCameraMode(nextMode);
+            }
+          }}
+          className={`h-9 px-3 rounded-full shadow-md border text-[11px] font-extrabold flex items-center gap-1.5 pointer-events-auto transition active:scale-95 shrink-0 ${
+            cameraMode === 'sky'
+              ? 'bg-indigo-950 text-amber-300 border-amber-400/50'
+              : cameraMode === 'tree'
+              ? 'bg-lime-800 text-white border-lime-600'
+              : 'bg-[#fcf9f2]/95 text-stone-800 border-stone-300/80'
+          }`}
+          title="터치하여 시점 전환 (산책 ➔ 나무 ➔ 밤하늘)"
+        >
+          {cameraMode === 'follow' && (
+            <>
+              <Compass className="w-3.5 h-3.5 text-lime-800 shrink-0" />
+              <span>산책뷰</span>
+            </>
           )}
-
-          <button
-            onClick={() => onSelectCameraMode('sky')}
-            className={`h-7 px-1.5 rounded-full text-[10px] font-extrabold transition flex items-center gap-0.5 ${
-              cameraMode === 'sky'
-                ? 'bg-indigo-950 text-amber-300 shadow'
-                : 'text-stone-700'
-            }`}
-          >
-            <Star className="w-3 h-3 fill-amber-400 text-amber-500" />
-            <span>{starCount}</span>
-          </button>
+          {cameraMode === 'tree' && (
+            <>
+              <span>🌳</span>
+              <span>나무({hangingCount})</span>
+            </>
+          )}
+          {cameraMode === 'sky' && (
+            <>
+              <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400 shrink-0" />
+              <span>별({starCount})</span>
+            </>
+          )}
+        </button>
         </div>
       </header>
 
